@@ -1,82 +1,4 @@
 {
-  "arbitrum": [
-    {
-      "id": "arbitrum_account_0",
-      "note": "Arbitrum account 0 (ETH path)",
-      "blockchain": "arbitrum",
-      "symbol": "ARB",
-      "networks": [
-        "eip155:42161"
-      ],
-      "script_type": "ethereum",
-      "addressNList": [
-        2147483692,
-        2147483708,
-        2147483648
-      ],
-      "addressNListMaster": [
-        2147483692,
-        2147483708,
-        2147483648,
-        0,
-        0
-      ],
-      "curve": "secp256k1",
-      "showDisplay": false
-    }
-  ],
-  "avalanche": [
-    {
-      "id": "avalanche_account_0",
-      "note": "Avalanche C-Chain account 0 (ETH path)",
-      "blockchain": "avalanche",
-      "symbol": "AVAX",
-      "networks": [
-        "eip155:43114"
-      ],
-      "script_type": "ethereum",
-      "addressNList": [
-        2147483692,
-        2147483708,
-        2147483648
-      ],
-      "addressNListMaster": [
-        2147483692,
-        2147483708,
-        2147483648,
-        0,
-        0
-      ],
-      "curve": "secp256k1",
-      "showDisplay": false
-    }
-  ],
-  "base": [
-    {
-      "id": "base_account_0",
-      "note": "Base account 0 (ETH path)",
-      "blockchain": "base",
-      "symbol": "BASE",
-      "networks": [
-        "eip155:8453"
-      ],
-      "script_type": "ethereum",
-      "addressNList": [
-        2147483692,
-        2147483708,
-        2147483648
-      ],
-      "addressNListMaster": [
-        2147483692,
-        2147483708,
-        2147483648,
-        0,
-        0
-      ],
-      "curve": "secp256k1",
-      "showDisplay": false
-    }
-  ],
   "bitcoin": [
     {
       "id": "bitcoin_legacy_account_0",
@@ -345,32 +267,6 @@
       "showDisplay": false
     }
   ],
-  "bsc": [
-    {
-      "id": "bsc_account_0",
-      "note": "Binance Smart Chain account 0 (ETH path)",
-      "blockchain": "bsc",
-      "symbol": "BSC",
-      "networks": [
-        "eip155:56"
-      ],
-      "script_type": "ethereum",
-      "addressNList": [
-        2147483692,
-        2147483708,
-        2147483648
-      ],
-      "addressNListMaster": [
-        2147483692,
-        2147483708,
-        2147483648,
-        0,
-        0
-      ],
-      "curve": "secp256k1",
-      "showDisplay": false
-    }
-  ],
   "cosmos": [
     {
       "id": "cosmos_account_0",
@@ -556,32 +452,6 @@
       "showDisplay": false
     }
   ],
-  "optimism": [
-    {
-      "id": "optimism_account_0",
-      "note": "Optimism account 0 (ETH path)",
-      "blockchain": "optimism",
-      "symbol": "OP",
-      "networks": [
-        "eip155:10"
-      ],
-      "script_type": "ethereum",
-      "addressNList": [
-        2147483692,
-        2147483708,
-        2147483648
-      ],
-      "addressNListMaster": [
-        2147483692,
-        2147483708,
-        2147483648,
-        0,
-        0
-      ],
-      "curve": "secp256k1",
-      "showDisplay": false
-    }
-  ],
   "osmosis": [
     {
       "id": "osmosis_account_0",
@@ -602,32 +472,6 @@
       "addressNListMaster": [
         2147483692,
         2147483766,
-        2147483648,
-        0,
-        0
-      ],
-      "curve": "secp256k1",
-      "showDisplay": false
-    }
-  ],
-  "polygon": [
-    {
-      "id": "polygon_account_0",
-      "note": "Polygon/Matic account 0 (ETH path)",
-      "blockchain": "polygon",
-      "symbol": "MATIC",
-      "networks": [
-        "eip155:137"
-      ],
-      "script_type": "ethereum",
-      "addressNList": [
-        2147483692,
-        2147483708,
-        2147483648
-      ],
-      "addressNListMaster": [
-        2147483692,
-        2147483708,
         2147483648,
         0,
         0
