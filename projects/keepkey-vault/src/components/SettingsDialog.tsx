@@ -1,4 +1,4 @@
-import { Tabs, VStack, Text, Button, Icon, Box, HStack, Flex, Link, Stack, Input, Textarea, Spinner, Switch } from '@chakra-ui/react'
+import { Tabs, VStack, Text, Button, Icon, Box, HStack, Flex, Link, Input, Spinner } from '@chakra-ui/react'
 import { 
   DialogRoot,
   DialogContent,
@@ -7,8 +7,8 @@ import {
   DialogBody,
   DialogCloseTrigger
 } from './ui/dialog'
-import { LuSettings, LuMonitor, LuCpu, LuNetwork, LuFileText } from 'react-icons/lu'
-import { FaCog, FaLink, FaCopy, FaCheck, FaTimes, FaUsb, FaLock, FaGlobe, FaDollarSign, FaDownload, FaTrash, FaSyncAlt, FaSearch, FaFilter, FaFolder } from 'react-icons/fa'
+import { LuSettings, LuCpu, LuFileText } from 'react-icons/lu'
+import { FaCog, FaLink, FaCopy, FaCheck, FaTimes, FaLock, FaGlobe, FaDollarSign, FaDownload, FaTrash, FaSyncAlt, FaSearch, FaFilter, FaFolder } from 'react-icons/fa'
 import { useState, useEffect } from 'react'
 
 import { KeepKeyDeviceList } from './KeepKeyDeviceList'

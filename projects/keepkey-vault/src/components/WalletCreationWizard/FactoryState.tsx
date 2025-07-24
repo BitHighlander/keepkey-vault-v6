@@ -14,7 +14,7 @@ interface FactoryStateProps {
   onClose?: () => void;
 }
 
-export function FactoryState({ onCreateWallet, onRecoverWallet, onClose }: FactoryStateProps) {
+export function FactoryState({ onCreateWallet, onRecoverWallet }: FactoryStateProps) {
   return (
     <Box
       w="100%"

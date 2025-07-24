@@ -78,7 +78,6 @@ export function RecoveryFlow({
   const [currentChar, setCurrentChar] = useState(0);
   const [characterInputs, setCharacterInputs] = useState(['', '', '', '']);
   const [isAutoCompleted, setIsAutoCompleted] = useState(false);
-  const [lastCharacterResult, setLastCharacterResult] = useState<'success' | 'failure' | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string>('');
   const [isRecoveryLocked, setIsRecoveryLocked] = useState(false);
   const [originalDeviceId, setOriginalDeviceId] = useState<string>(propDeviceId);
@@ -430,7 +429,7 @@ export function RecoveryFlow({
           // Check if this is a final failure (recovery completely failed)
           if (currentWord >= wordCount - 1 && currentChar >= 3) {
             // This is a complete recovery failure
-            setLastCharacterResult('failure');
+            // setLastCharacterResult('failure');
             setFeedbackMessage('Recovery failed - the seed phrase words were not entered correctly. Please verify your recovery phrase and try again.');
             setState('character-failure');
             setIsRecoveryLocked(false); // Unlock so user can try again
@@ -438,14 +437,14 @@ export function RecoveryFlow({
             // Don't auto-return to input - let user decide what to do
           } else {
             // This is just an individual character failure
-            setLastCharacterResult('failure');
+            // setLastCharacterResult('failure');
             setFeedbackMessage('Incorrect character - please check your device screen and try again');
             setState('character-failure');
             
             // Show failure feedback for 1.5 seconds then return to input
             setTimeout(() => {
               setState('phrase-entry');
-              setLastCharacterResult(null);
+              // setLastCharacterResult(null);
               setFeedbackMessage('');
               // Keep recovery locked during individual character failure
             }, 1500);
@@ -459,7 +458,7 @@ export function RecoveryFlow({
           if (result.is_complete) {
             // ONLY show big success animation when ENTIRE recovery is complete
             triggerConfetti();
-            setLastCharacterResult('success');
+            // setLastCharacterResult('success');
             setFeedbackMessage('Recovery completed successfully!');
             setState('character-success');
             setIsRecoveryLocked(false); // Unlock UI on completion
@@ -478,7 +477,7 @@ export function RecoveryFlow({
         
         // Show proper error feedback to user
         const errorString = String(error);
-        setLastCharacterResult('failure');
+        // setLastCharacterResult('failure');
         
         if (errorString.includes('Words were not entered correctly') || 
             errorString.includes('substitution cipher')) {
@@ -542,7 +541,7 @@ export function RecoveryFlow({
       if (result.is_complete) {
         // ONLY show big success animation when ENTIRE recovery is complete
         triggerConfetti();
-        setLastCharacterResult('success');
+        // setLastCharacterResult('success');
         setFeedbackMessage('Recovery completed successfully!');
         setState('character-success');
         setIsRecoveryLocked(false); // Unlock UI on completion
@@ -557,7 +556,7 @@ export function RecoveryFlow({
       }
     } catch (error) {
       console.error('Failed to delete character:', error);
-      setLastCharacterResult('failure');
+      // setLastCharacterResult('failure');
       setFeedbackMessage(`Failed to delete character: ${error}`);
       setState('character-failure');
       setIsRecoveryLocked(false); // Unlock on delete error so user can exit/retry
@@ -629,7 +628,7 @@ export function RecoveryFlow({
       }
     } catch (error) {
       console.error('Failed to move to next word:', error);
-      setLastCharacterResult('failure');
+      // setLastCharacterResult('failure');
       setFeedbackMessage(`Failed to move to next word: ${error}`);
       setState('character-failure');
       setIsRecoveryLocked(false); // Unlock on error so user can exit/retry
@@ -654,7 +653,7 @@ export function RecoveryFlow({
       if (!result) {
         // safeDeviceInvoke returned null due to error during recovery - show error to user
         console.error("🔄 Recovery completion failed - showing error to user");
-        setLastCharacterResult('failure');
+        // setLastCharacterResult('failure');
         setFeedbackMessage('Recovery completion failed. Please verify your recovery phrase is correct and try again.');
         setState('character-failure');
         setIsRecoveryLocked(false); // Unlock so user can retry or exit
@@ -665,7 +664,7 @@ export function RecoveryFlow({
         // Recovery completed successfully
         console.log("🎉 Recovery completed successfully!");
         triggerConfetti();
-        setLastCharacterResult('success');
+        // setLastCharacterResult('success');
         setFeedbackMessage('Recovery completed successfully!');
         setState('character-success');
         setIsRecoveryLocked(false); // Unlock UI on completion
@@ -677,7 +676,7 @@ export function RecoveryFlow({
       } else {
         // Recovery not complete yet - this shouldn't happen when user clicks "Complete"
         console.warn("🔄 Recovery completion returned but not marked as complete");
-        setLastCharacterResult('failure');
+        // setLastCharacterResult('failure');
         setFeedbackMessage('Recovery completion unsuccessful. Please continue entering your recovery phrase.');
         setState('character-failure');
         setIsRecoveryLocked(false);
@@ -687,7 +686,7 @@ export function RecoveryFlow({
       
       // Show proper error feedback to user
       const errorString = String(error);
-      setLastCharacterResult('failure');
+      // setLastCharacterResult('failure');
       
       if (errorString.includes('Words were not entered correctly') || 
           errorString.includes('substitution cipher') ||
@@ -943,7 +942,7 @@ export function RecoveryFlow({
                 setCurrentChar(0);
                 setCharacterInputs(['', '', '', '']);
                 setIsAutoCompleted(false);
-                setLastCharacterResult(null);
+                // setLastCharacterResult(null);
                 setFeedbackMessage('');
                 setIsRecoveryLocked(false);
               }}
@@ -980,7 +979,7 @@ export function RecoveryFlow({
                   setCurrentChar(0);
                   setCharacterInputs(['', '', '', '']);
                   setIsAutoCompleted(false);
-                  setLastCharacterResult(null);
+                  // setLastCharacterResult(null);
                   setFeedbackMessage('');
                   setIsRecoveryLocked(false);
                   setPinFailureCount(0);
@@ -1129,7 +1128,7 @@ export function RecoveryFlow({
               setCurrentChar(0);
               setCharacterInputs(['', '', '', '']);
               setIsAutoCompleted(false);
-              setLastCharacterResult(null);
+              // setLastCharacterResult(null);
               setFeedbackMessage('');
               setIsRecoveryLocked(false);
             }}
@@ -1170,7 +1169,7 @@ export function RecoveryFlow({
               setCurrentChar(0);
               setCharacterInputs(['', '', '', '']);
               setIsAutoCompleted(false);
-              setLastCharacterResult(null);
+              // setLastCharacterResult(null);
               setFeedbackMessage('');
               setIsRecoveryLocked(false);
               setPinFailureCount(0);
@@ -1341,7 +1340,7 @@ export function RecoveryFlow({
                   setCurrentChar(0);
                   setCharacterInputs(['', '', '', '']);
                   setIsAutoCompleted(false);
-                  setLastCharacterResult(null);
+                  // setLastCharacterResult(null);
                   setFeedbackMessage('');
                   setIsRecoveryLocked(false);
                   setPinFailureCount(0);
@@ -1384,7 +1383,7 @@ export function RecoveryFlow({
                 setCurrentChar(0);
                 setCharacterInputs(['', '', '', '']);
                 setIsAutoCompleted(false);
-                setLastCharacterResult(null);
+                // setLastCharacterResult(null);
                 setFeedbackMessage('');
                 setIsRecoveryLocked(false);
                 setPinFailureCount(0);

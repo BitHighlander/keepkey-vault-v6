@@ -41,7 +41,7 @@ export function WalletCreationWizard({
 }: WalletCreationWizardProps) {
   console.debug('[WalletCreationWizard] deviceId prop on mount:', deviceId);
   const [state, setState] = useState<FlowState>({
-    step: 'factory-state',
+    step: WalletFlowStep.FactoryState,
     deviceLabel: '',
     pinSession: null,
     recoverySettings: null,
@@ -65,7 +65,7 @@ export function WalletCreationWizard({
   // Handle create wallet selection from factory state
   const handleCreateWallet = useCallback(() => {
     console.log("Starting wallet creation flow");
-    updateState({ step: 'label', flowType: 'create' });
+    updateState({ step: WalletFlowStep.Label, flowType: 'create' });
   }, [updateState]);
 
   // Handle recover wallet selection from factory state
@@ -131,7 +131,7 @@ export function WalletCreationWizard({
       }
       updateState({ 
         deviceLabel: label.trim(), 
-        step: 'pin',
+        step: WalletFlowStep.Pin,
         isLoading: false,
         error: null 
       });
@@ -144,7 +144,7 @@ export function WalletCreationWizard({
   // Handle device label skip
   const handleLabelSkip = useCallback(() => {
     console.log("Skipping device label");
-    updateState({ deviceLabel: '', step: 'pin' });
+    updateState({ deviceLabel: '', step: WalletFlowStep.Pin });
   }, [updateState]);
 
   // Handle PIN creation completion (both create and confirm)
@@ -158,7 +158,7 @@ export function WalletCreationWizard({
       console.log("🏗️ Setting step to backup-display for wallet creation");
       updateState({ 
         pinSession: session,
-        step: 'backup-display',
+        step: WalletFlowStep.BackupDisplay,
         isLoading: false,
         error: null 
       });
@@ -185,7 +185,7 @@ export function WalletCreationWizard({
       });
       
       updateState({ 
-        step: 'backup-display',
+        step: WalletFlowStep.BackupDisplay,
         isLoading: false,
         error: null 
       });
@@ -204,7 +204,7 @@ export function WalletCreationWizard({
       await invoke('complete_wallet_creation', { deviceId });
       
       updateState({ 
-        step: 'complete',
+        step: WalletFlowStep.Complete,
         isLoading: false,
         error: null 
       });
@@ -224,14 +224,14 @@ export function WalletCreationWizard({
   // Handle back navigation
   const handleBack = useCallback(() => {
     switch (state.step) {
-      case 'label':
-        updateState({ step: 'factory-state', flowType: null });
+      case WalletFlowStep.Label:
+        updateState({ step: WalletFlowStep.FactoryState, flowType: null });
         break;
-      case 'pin':
-        updateState({ step: 'label' });
+      case WalletFlowStep.Pin:
+        updateState({ step: WalletFlowStep.Label });
         break;
       case 'recovery-settings':
-        updateState({ step: 'factory-state', flowType: null });
+        updateState({ step: WalletFlowStep.FactoryState, flowType: null });
         break;
       case 'recovery-flow':
         updateState({ step: 'recovery-settings' });
@@ -248,7 +248,7 @@ export function WalletCreationWizard({
     console.log(`🎭 Full state:`, state);
     
     // SAFETY CHECK: If we're in recovery flow but somehow got to a wallet creation step, redirect
-    if (state.flowType === 'recovery' && (state.step === 'backup-display' || state.step === 'complete')) {
+    if (state.flowType === 'recovery' && (state.step === WalletFlowStep.BackupDisplay || state.step === WalletFlowStep.Complete)) {
       console.error(`❌ FLOW ERROR: Recovery flow should never reach ${state.step}! Redirecting to recovery-flow`);
       if (state.recoverySettings) {
         updateState({ step: 'recovery-flow' });
@@ -261,7 +261,7 @@ export function WalletCreationWizard({
     }
     
     switch (state.step) {
-      case 'factory-state':
+      case WalletFlowStep.FactoryState:
         return (
           <FactoryState
             onCreateWallet={handleCreateWallet}
@@ -305,7 +305,7 @@ export function WalletCreationWizard({
           />
         );
 
-      case 'label':
+      case WalletFlowStep.Label:
         return (
           <DeviceLabel
             onComplete={handleLabelComplete}
@@ -314,7 +314,7 @@ export function WalletCreationWizard({
           />
         );
 
-      case 'pin':
+      case WalletFlowStep.Pin:
         return (
           <DevicePin
             deviceId={deviceId}
@@ -327,7 +327,7 @@ export function WalletCreationWizard({
           />
         );
 
-      case 'backup-display':
+      case WalletFlowStep.BackupDisplay:
         console.debug('[WalletCreationWizard] Rendering BackupPhraseDisplay with deviceId:', deviceId);
         return (
           <BackupPhraseDisplay
@@ -338,7 +338,7 @@ export function WalletCreationWizard({
           />
         );
 
-      case 'complete':
+      case WalletFlowStep.Complete:
         console.debug('[WalletCreationWizard] Rendering WalletCreationComplete with deviceId:', deviceId);
         return (
           <WalletCreationComplete
@@ -411,7 +411,6 @@ function RecoveryComplete({
 // These will be implemented in the next phase
 
 function BackupPhraseDisplay({ 
-  deviceId, 
   onComplete, 
   isLoading, 
   error 

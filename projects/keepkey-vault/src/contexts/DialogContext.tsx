@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect, Suspense, startTransition } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, Suspense, startTransition } from 'react';
 
 export type DialogPriority = 'low' | 'normal' | 'high' | 'critical';
 

@@ -16,14 +16,12 @@ import holdAndConnectSvg from '../assets/svg/hold-and-connect.svg'
 interface EnterBootloaderModeDialogProps {
   isOpen: boolean
   bootloaderCheck: BootloaderCheck
-  deviceId: string  
   onClose: () => void
 }
 
 export const EnterBootloaderModeDialog = ({ 
   isOpen, 
   bootloaderCheck, 
-  deviceId,
   onClose 
 }: EnterBootloaderModeDialogProps) => {
   return (

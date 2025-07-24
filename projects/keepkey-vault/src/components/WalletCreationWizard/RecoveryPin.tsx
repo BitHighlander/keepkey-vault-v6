@@ -115,7 +115,7 @@ export function RecoveryPin({
       setStepError(null);
       
       try {
-        const validation = PinService.validatePositions(positions);
+        const validation = await PinService.validatePositions(positions);
         if (!validation.valid) {
           setStepError(validation.error!);
           setIsSubmitting(false);

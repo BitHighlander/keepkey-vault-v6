@@ -1,7 +1,6 @@
 'use client'
 
 import { Icon, IconProps } from '@chakra-ui/react'
-import * as React from 'react'
 
 export const KeepKeyUiGlyph = (props: IconProps) => (
   <Icon viewBox="0 0 512 512" {...props}>

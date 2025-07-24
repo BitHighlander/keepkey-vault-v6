@@ -23,7 +23,6 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
   const [showEnterBootloaderMode, setShowEnterBootloaderMode] = useState(false)
   const [showPinUnlock, setShowPinUnlock] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [retryCount, setRetryCount] = useState(0)
   const [hasCompletedOnce, setHasCompletedOnce] = useState(false)
   
   // Track processed events to prevent loops
@@ -186,14 +185,13 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
           // Still update device status (for recovery to work) but don't trigger UI changes
           setDeviceStatus(status)
           setConnectedDeviceId(status.deviceId)
-          setRetryCount(0)
           // DO NOT call handleDeviceStatus during recovery to prevent UI conflicts
           return;
         }
         
         setDeviceStatus(status)
         setConnectedDeviceId(status.deviceId)
-        setRetryCount(0) // Reset retry count on successful event
+        // Reset retry count on successful event
         handleDeviceStatus(status)
       })
 
@@ -395,7 +393,6 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
         setShowWalletCreation(false)
         setShowEnterBootloaderMode(false)
         setShowPinUnlock(false)
-        setRetryCount(0)
         if (timeoutId) clearTimeout(timeoutId)
         
         // Also hide the invalid state dialog if it's showing for this device
@@ -524,7 +521,6 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
         <EnterBootloaderModeDialog
           isOpen={showEnterBootloaderMode}
           bootloaderCheck={deviceStatus.bootloaderCheck}
-          deviceId={deviceStatus.deviceId}
           onClose={handleEnterBootloaderModeClose}
         />
       )}

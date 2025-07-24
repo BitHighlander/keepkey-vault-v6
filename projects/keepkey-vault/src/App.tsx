@@ -13,7 +13,6 @@ import { DeviceUpdateManager } from './components/DeviceUpdateManager';
 import { useOnboardingState } from './hooks/useOnboardingState';
 // import { VaultInterface } from './components/VaultInterface';
 import { DialogProvider, useDialog } from './contexts/DialogContext'
-import { useTroubleshootingWizard } from './contexts/DialogContext'
 
 // Define the expected structure of DeviceFeatures from Rust
 interface DeviceFeatures {
@@ -44,32 +43,16 @@ interface DeviceInfoState {
     error: string | null;
 }
 
-interface ApplicationState {
-    status: string;
-    connected: boolean;
-    features: DeviceFeatures | null;
-}
 
 function App() {
-    const [loadingStatus, setLoadingStatus] = useState<string>('Starting...')
-    const [deviceConnected, setDeviceConnected] = useState<boolean>(false)
-    const [deviceInfo, setDeviceInfo] = useState<any>(null)
-    const [deviceUpdateComplete, setDeviceUpdateComplete] = useState<boolean>(false)
-    const [serverReady, setServerReady] = useState<boolean>(false)
-    const [serverError, setServerError] = useState<string | null>(null)
-    const [isRestarting, setIsRestarting] = useState<boolean>(false)
+    // const [serverReady, setServerReady] = useState<boolean>(false)
+    // const [serverError, setServerError] = useState<string | null>(null)
     const [frontendReadySignalSent, setFrontendReadySignalSent] = useState<boolean>(false)
-
-    const troubleshootingWizard = useTroubleshootingWizard()
 
     const reinitialize = () => {
         console.log("🔄 Reinitializing app state...")
-        setLoadingStatus('Starting...')
-        setDeviceConnected(false)
-        setDeviceInfo(null)
-        setDeviceUpdateComplete(false)
-        setServerReady(false)
-        setServerError(null)
+        // setServerReady(false)
+        // setServerError(null)
         setFrontendReadySignalSent(false) // Reset frontend ready signal state
     }
 
@@ -83,9 +66,11 @@ function App() {
         const [isRestarting, setIsRestarting] = useState(false);
         const [deviceUpdateComplete, setDeviceUpdateComplete] = useState(false);
         const [onboardingActive, setOnboardingActive] = useState(false);
+        const [serverReady, setServerReady] = useState(false);
+        const [serverError, setServerError] = useState<string | null>(null);
         const { showOnboarding, showError } = useCommonDialogs();
         const { shouldShowOnboarding, loading: onboardingLoading, clearCache } = useOnboardingState();
-        const { hideAll, hide, activeDialog, getQueue } = useDialog();
+        const { hide, activeDialog, getQueue } = useDialog();
 
         // Debug log active dialogs
         useEffect(() => {
@@ -224,8 +209,8 @@ function App() {
                             const response = await fetch('http://127.0.0.1:1646/api/health');
                             if (response.ok) {
                                 console.log('✅ API server is running, manually setting serverReady = true');
-                                setServerReady(true);
-                                setServerError(null);
+                                // setServerReady(true);
+                                // setServerError(null);
                             }
                         } catch (error) {
                             console.log('❌ API server check failed:', error);
@@ -376,15 +361,6 @@ function App() {
             };
         }, []); // Empty dependency array ensures this runs once on mount and cleans up on unmount
 
-        const mcpUrl = "http://127.0.0.1:1646/mcp";
-        const [hasCopied, setHasCopied] = useState(false);
-
-        const handleCopy = () => {
-            navigator.clipboard.writeText(mcpUrl);
-            setHasCopied(true);
-            setTimeout(() => setHasCopied(false), 2000);
-        };
-
         // Move onComplete callback BEFORE any early returns to fix React Hooks error
         const handleDeviceUpdateComplete = useCallback(() => {
             console.log('📱 [App] DeviceUpdateManager onComplete callback triggered');
@@ -403,20 +379,6 @@ function App() {
                 setDeviceConnected(true);
             }
         }, [deviceUpdateComplete, loadingStatus, deviceConnected]);
-
-        // CRITICAL: Only show VaultInterface when BOTH device is ready AND onboarding is complete
-        // Onboarding has absolute priority over everything else
-        console.log('📱 [App] Checking if should show VaultInterface:', {
-            loadingStatus,
-            deviceConnected,
-            deviceUpdateComplete,
-            serverReady,
-            serverError,
-            shouldShowOnboarding,
-            onboardingActive,
-            deviceReady: loadingStatus === "Device ready" && deviceConnected && deviceUpdateComplete,
-            onboardingComplete: !shouldShowOnboarding && !onboardingActive
-        });
 
         // Show VaultInterface when device is ready, even if onboarding is needed (dialog will overlay)
         if (loadingStatus === "Device ready" && deviceConnected && deviceUpdateComplete) {

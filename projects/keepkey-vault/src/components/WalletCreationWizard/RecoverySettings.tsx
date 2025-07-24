@@ -6,7 +6,6 @@ import {
   HStack,
   Text,
   Button,
-  Stack,
 } from "@chakra-ui/react";
 
 interface RecoverySettingsProps {

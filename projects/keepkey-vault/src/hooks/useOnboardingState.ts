@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 // Cache onboarding state to prevent duplicate backend calls
 let onboardingCache: { isFirstTime?: boolean; isOnboarded?: boolean } = {};
-let isLoading = false;
+let isLoading = false; // Used to track loading state across instances
 let loadPromise: Promise<{ isFirstTime: boolean; isOnboarded: boolean }> | null = null;
 
 export function useOnboardingState() {
