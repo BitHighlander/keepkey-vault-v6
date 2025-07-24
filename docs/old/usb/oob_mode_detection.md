@@ -89,7 +89,7 @@ Device identified as Legacy Bootloader based on bootloader_mode flag
 ---
 
 ## References
-- [KeepKey Device Controller Implementation](./device_controller_implementation.md)
+- [KeepKey Device Controller Implementation](device_controller_implementation.md)
 - [KeepKey Protocol Documentation](https://github.com/keepkey/device-protocol)
 
 ---

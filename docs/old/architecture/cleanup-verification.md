@@ -133,12 +133,12 @@ let address = queue_handle.get_address(path, coin, script_type).await?;
    - Anti-patterns to avoid
    - Proper usage examples
 
-3. ✅ **[Architecture Guide](./keepkey-rust-integration.md)**
+3. ✅ **[Architecture Guide](keepkey-rust-integration.md)**
    - Comprehensive architectural documentation
    - Design principles and boundaries
    - Integration patterns
 
-4. ✅ **[Cleanup Summary](./cleanup-summary.md)**
+4. ✅ **[Cleanup Summary](cleanup-summary.md)**
    - Record of violations found and fixed
    - Before/after comparisons
    - Metrics and improvements

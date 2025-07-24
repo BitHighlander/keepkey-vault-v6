@@ -238,7 +238,7 @@ When implementing a transport:
 
 ## References
 
-- [v4 Implementation](../../../keepkey-desktop-v4/src-tauri/src/device/backends/hid.rs) - Working HID reference
+- [v4 Implementation](../../../../keepkey-desktop-v4/src-tauri/src/device/backends/hid.rs) - Working HID reference
 - [USB HID Specification](https://www.usb.org/hid) - Official USB HID docs
 - [WebUSB API](https://wicg.github.io/webusb/) - Browser WebUSB specification
 

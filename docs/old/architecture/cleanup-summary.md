@@ -302,7 +302,7 @@ match keepkey_rust::features::get_device_features_by_id(&device_id) {
 
 1. **[keepkey-rust README](../../projects/keepkey-rust/README.md)**: Complete API documentation
 2. **[vault-v2 README](../../projects/vault-v2/README.md)**: Clean integration guide
-3. **[Architecture Guide](./keepkey-rust-integration.md)**: Comprehensive architectural documentation
+3. **[Architecture Guide](keepkey-rust-integration.md)**: Comprehensive architectural documentation
 4. **This cleanup summary**: Record of violations found and fixed
 
 ## ✅ **Verification**
