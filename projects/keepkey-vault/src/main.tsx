@@ -4,6 +4,7 @@ import App from "./App";
 import { ChakraProvider } from "./providers/ChakraProvider";
 import { DialogProvider } from "./contexts/DialogContext";
 import { BlockingActionsProvider } from "./contexts/BlockingActionsContext";
+import './utils/testGetFeatures';
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>

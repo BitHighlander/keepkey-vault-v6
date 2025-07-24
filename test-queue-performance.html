@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KeepKey Queue Performance Test</title>
+</head>
+<body>
+    <h1>KeepKey Queue Performance Test</h1>
+    <p>Open the browser console and run: <code>window.testGetFeatures()</code></p>
+    <button onclick="runTest()">Run Test</button>
+    <pre id="output"></pre>
+    
+    <script>
+        async function runTest() {
+            const output = document.getElementById('output');
+            output.textContent = 'Running test...\n';
+            
+            // Redirect console.log to our output
+            const originalLog = console.log;
+            console.log = function(...args) {
+                originalLog(...args);
+                output.textContent += args.join(' ') + '\n';
+            };
+            
+            try {
+                if (window.testGetFeatures) {
+                    await window.testGetFeatures();
+                } else {
+                    output.textContent = 'Test function not found. Make sure the Tauri app is running.';
+                }
+            } catch (e) {
+                output.textContent += 'Error: ' + e.message;
+            }
+            
+            // Restore console.log
+            console.log = originalLog;
+        }
+    </script>
+</body>
+</html>
