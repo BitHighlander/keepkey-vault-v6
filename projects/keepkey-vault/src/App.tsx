@@ -202,23 +202,6 @@ function App() {
                         console.log('🎯 Frontend ready signal already sent, skipping...');
                     }
 
-                    // TEMPORARY: Check if servers are running and manually set server ready
-                    setTimeout(async () => {
-                        try {
-                            console.log('🔍 Manually checking if servers are running...');
-                            const response = await fetch('http://127.0.0.1:1646/api/health');
-                            if (response.ok) {
-                                console.log('✅ API server is running, manually setting serverReady = true');
-                                // setServerReady(true);
-                                // setServerError(null);
-                            }
-                        } catch (error) {
-                            console.log('❌ API server check failed:', error);
-                            setServerError('API server not responding');
-                            setServerReady(false);
-                        }
-                    }, 2000); // Check after 2 seconds
-
                     // Listen for status updates from backend
                     console.log('🎯 Setting up status:update listener...');
                     unlistenStatusUpdate = await listen('status:update', (event) => {

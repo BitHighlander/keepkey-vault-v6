@@ -6,9 +6,40 @@ use keepkey_rust::{
     device_queue::{DeviceQueueFactory, DeviceQueueHandle},
     features::DeviceFeatures,
 };
+use tauri::{AppHandle, Emitter};
+use serde::{Serialize, Deserialize};
 
 // Type alias for the device queue manager
 pub type DeviceQueueManager = Arc<Mutex<HashMap<String, DeviceQueueHandle>>>;
+
+// Add frontend readiness state and queued events
+lazy_static::lazy_static! {
+    static ref FRONTEND_READY_STATE: Arc<tokio::sync::RwLock<FrontendReadyState>> = Arc::new(tokio::sync::RwLock::new(FrontendReadyState::default()));
+    // One-time initialization flag to prevent duplicate ready signals
+    static ref FRONTEND_READY_ONCE: Arc<tokio::sync::Mutex<bool>> = Arc::new(tokio::sync::Mutex::new(false));
+}
+
+#[derive(Debug, Clone)]
+struct FrontendReadyState {
+    is_ready: bool,
+    queued_events: Vec<QueuedEvent>,
+}
+
+impl Default for FrontendReadyState {
+    fn default() -> Self {
+        Self {
+            is_ready: false,
+            queued_events: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct QueuedEvent {
+    event_name: String,
+    payload: serde_json::Value,
+    timestamp: u64,
+}
 
 /// Get features for a specific device
 #[tauri::command]
@@ -121,4 +152,282 @@ fn convert_features_to_device_features(features: keepkey_rust::messages::Feature
             .map(|p| p.policy_name().to_string())
             .collect(),
     }
+} 
+
+/// Signal that the frontend is ready to receive events
+#[tauri::command]
+pub async fn frontend_ready(app: AppHandle) -> Result<(), String> {
+    // Check if we've already processed the ready signal
+    let mut already_ready = FRONTEND_READY_ONCE.lock().await;
+    
+    if *already_ready {
+        log::debug!("🎯 Frontend ready signal already processed, ignoring duplicate call");
+        return Ok(());
+    }
+    
+    *already_ready = true;
+    drop(already_ready); // Release lock before processing
+    
+    log::info!("🎯 Frontend ready signal received - enabling event emission");
+    
+    let mut state = FRONTEND_READY_STATE.write().await;
+    state.is_ready = true;
+    
+    // Flush any queued events
+    if !state.queued_events.is_empty() {
+        log::info!("📦 Flushing {} queued events to frontend", state.queued_events.len());
+        
+        for event in state.queued_events.drain(..) {
+            log::debug!("📡 Sending queued event: {} (queued at: {})", event.event_name, event.timestamp);
+            if let Err(e) = app.emit(&event.event_name, &event.payload) {
+                log::error!("❌ Failed to emit queued event {}: {}", event.event_name, e);
+            }
+        }
+        
+        log::info!("✅ All queued events have been sent to frontend");
+    } else {
+        log::debug!("✅ No queued events to flush");
+    }
+    
+    Ok(())
+}
+
+/// Helper function to emit events (either immediately or queue them)
+pub async fn emit_or_queue_event(app: &AppHandle, event_name: &str, payload: serde_json::Value) -> Result<(), String> {
+    let state = FRONTEND_READY_STATE.read().await;
+    
+    if state.is_ready {
+        // Frontend is ready, emit immediately
+        app.emit(event_name, &payload)
+            .map_err(|e| format!("Failed to emit event {}: {}", event_name, e))?;
+        println!("📡 Emitted event: {}", event_name);
+    } else {
+        // Frontend not ready, queue the event
+        drop(state); // Release read lock
+        let mut state = FRONTEND_READY_STATE.write().await;
+        
+        let queued_event = QueuedEvent {
+            event_name: event_name.to_string(),
+            payload,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64,
+        };
+        
+        state.queued_events.push(queued_event);
+        println!("📋 Queued event: {} (total queued: {})", event_name, state.queued_events.len());
+    }
+    
+    Ok(())
+} 
+
+/// Get the config directory path
+fn get_config_dir() -> Result<std::path::PathBuf, String> {
+    let home_dir = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "Could not find home directory")?;
+    
+    let config_dir = std::path::PathBuf::from(home_dir).join(".keepkey");
+    
+    // Create directory if it doesn't exist
+    if !config_dir.exists() {
+        std::fs::create_dir_all(&config_dir)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+    
+    Ok(config_dir)
+}
+
+/// Get the config file path
+fn get_config_file_path() -> Result<std::path::PathBuf, String> {
+    let config_dir = get_config_dir()?;
+    Ok(config_dir.join("keepkey.json"))
+}
+
+/// Load configuration from file
+fn load_config() -> Result<serde_json::Value, String> {
+    let config_path = get_config_file_path()?;
+    
+    if !config_path.exists() {
+        // Return default config if file doesn't exist
+        return Ok(serde_json::json!({
+            "language": "en",
+            "isOnboarded": false,
+            "theme": "dark",
+            "notifications": true
+        }));
+    }
+    
+    let config_str = std::fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config file: {}", e))?;
+    
+    serde_json::from_str(&config_str)
+        .map_err(|e| format!("Failed to parse config file: {}", e))
+}
+
+/// Save configuration to file
+fn save_config(config: &serde_json::Value) -> Result<(), String> {
+    let config_path = get_config_file_path()?;
+    
+    let config_str = serde_json::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+    
+    std::fs::write(&config_path, config_str)
+        .map_err(|e| format!("Failed to write config file: {}", e))?;
+    
+    Ok(())
+}
+
+/// Check if this is the first time install
+#[tauri::command]
+pub async fn is_first_time_install() -> Result<bool, String> {
+    let config = load_config()?;
+    let is_onboarded = config.get("isOnboarded")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    
+    Ok(!is_onboarded)
+}
+
+/// Check if user is onboarded
+#[tauri::command]
+pub async fn is_onboarded() -> Result<bool, String> {
+    let config = load_config()?;
+    let is_onboarded = config.get("isOnboarded")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    
+    Ok(is_onboarded)
+}
+
+/// Mark onboarding as completed
+#[tauri::command]
+pub async fn set_onboarding_completed(app: AppHandle) -> Result<(), String> {
+    let mut config = load_config()?;
+    
+    if let Some(obj) = config.as_object_mut() {
+        obj.insert("isOnboarded".to_string(), serde_json::Value::Bool(true));
+    }
+    
+    save_config(&config)?;
+    log::info!("✅ Onboarding marked as completed");
+    
+    // Emit onboarding completion event
+    if let Err(e) = emit_or_queue_event(&app, "onboarding:completed", serde_json::json!({
+        "completed": true,
+        "timestamp": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+    })).await {
+        log::error!("Failed to emit onboarding completion event: {}", e);
+    }
+    
+    Ok(())
+}
+
+/// Debug onboarding state
+#[tauri::command]
+pub async fn debug_onboarding_state() -> Result<String, String> {
+    let config = load_config()?;
+    Ok(format!("Config: {}", serde_json::to_string_pretty(&config).unwrap_or_else(|_| "Unable to serialize".to_string())))
+}
+
+/// Check if device is ready and handle onboarding status
+pub async fn check_device_ready_and_onboarding(device_id: &str, app: &AppHandle, queue_manager: &DeviceQueueManager) -> Result<(), String> {
+    log::info!("🔍 Checking device readiness and onboarding status for device: {}", device_id);
+    
+    // Get device features first
+    let queue_handle = get_or_create_device_queue(device_id, queue_manager).await?;
+    
+    match queue_handle.get_features().await {
+        Ok(features) => {
+            log::info!("✅ Got features for device {}: initialized={}", device_id, features.initialized.unwrap_or(false));
+            
+            // Check if device is initialized
+            if features.initialized.unwrap_or(false) {
+                // Device is initialized, now check onboarding status
+                match is_onboarded().await {
+                    Ok(is_onboarded) => {
+                        if is_onboarded {
+                            log::info!("✅ Device {} is ready and user is onboarded", device_id);
+                            
+                            // Emit device ready event
+                            let ready_payload = serde_json::json!({
+                                "device_id": device_id,
+                                "status": "device_ready",
+                                "features": convert_features_to_device_features(features),
+                                "message": "Device is ready and user has completed onboarding"
+                            });
+                            
+                            if let Err(e) = emit_or_queue_event(app, "device:ready", ready_payload).await {
+                                log::error!("❌ Failed to emit device ready event: {}", e);
+                            }
+                        } else {
+                            log::info!("📚 Device {} is ready but user needs onboarding", device_id);
+                            
+                            // Emit onboarding required event
+                            let onboarding_payload = serde_json::json!({
+                                "device_id": device_id,
+                                "status": "device_ready_onboarding_needed",
+                                "features": convert_features_to_device_features(features),
+                                "message": "Device is ready but user needs to complete onboarding"
+                            });
+                            
+                            if let Err(e) = emit_or_queue_event(app, "device:onboarding-required", onboarding_payload).await {
+                                log::error!("❌ Failed to emit onboarding required event: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("❌ Failed to check onboarding status: {}", e);
+                        
+                        // Default to showing onboarding if we can't determine status
+                        let onboarding_payload = serde_json::json!({
+                            "device_id": device_id,
+                            "status": "device_ready_onboarding_needed",
+                            "features": convert_features_to_device_features(features),
+                            "message": "Device is ready but onboarding status unclear - showing onboarding"
+                        });
+                        
+                        if let Err(e) = emit_or_queue_event(app, "device:onboarding-required", onboarding_payload).await {
+                            log::error!("❌ Failed to emit onboarding required event: {}", e);
+                        }
+                    }
+                }
+            } else {
+                log::info!("⏳ Device {} is not initialized yet", device_id);
+                
+                // Emit device needs initialization event
+                let init_payload = serde_json::json!({
+                    "device_id": device_id,
+                    "status": "device_needs_initialization",
+                    "features": convert_features_to_device_features(features),
+                    "message": "Device is connected but needs initialization"
+                });
+                
+                if let Err(e) = emit_or_queue_event(app, "device:needs-initialization", init_payload).await {
+                    log::error!("❌ Failed to emit device needs initialization event: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("❌ Failed to get features for device {}: {}", device_id, e);
+            
+            // Emit error event
+            let error_payload = serde_json::json!({
+                "device_id": device_id,
+                "status": "device_error",
+                "error": e.to_string(),
+                "message": "Failed to get device features"
+            });
+            
+            if let Err(e) = emit_or_queue_event(app, "device:error", error_payload).await {
+                log::error!("❌ Failed to emit device error event: {}", e);
+            }
+        }
+    }
+    
+    Ok(())
 } 
