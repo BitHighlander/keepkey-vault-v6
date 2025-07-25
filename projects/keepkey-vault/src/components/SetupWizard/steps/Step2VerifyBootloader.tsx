@@ -82,7 +82,13 @@ export function Step2VerifyBootloader({ onNext, onSkip, deviceId }: StepProps) {
       }
     } catch (error) {
       console.error('Bootloader update failed:', error);
-      setError(error?.toString() || 'Update failed');
+      // Check if this is the "not implemented" error
+      const errorStr = error?.toString() || 'Update failed';
+      if (errorStr.includes('not yet implemented')) {
+        setError('Bootloader update is not yet available. Please update manually using the KeepKey Updater app.');
+      } else {
+        setError(errorStr);
+      }
     } finally {
       setUpdating(false);
     }
@@ -146,24 +152,32 @@ export function Step2VerifyBootloader({ onNext, onSkip, deviceId }: StepProps) {
             {loading ? (
               <VStack gap={4}>
                 <Spinner size="lg" color="blue.500" />
-                <Text color="gray.400">Checking bootloader status...</Text>
+                <Text color="gray.400">Verifying bootloader security...</Text>
+                <Text fontSize="sm" color="gray.500">This may take a moment</Text>
               </VStack>
             ) : error ? (
               <VStack gap={4} p={6} bg="red.900" borderRadius="md" borderWidth="1px" borderColor="red.600">
                 <Icon as={FaExclamationTriangle} boxSize={12} color="red.400" />
                 <Text fontSize="lg" fontWeight="semibold" color="white">
-                  Bootloader Check Failed
+                  Bootloader Verification Issue
                 </Text>
                 <Text color="red.200" textAlign="center">
                   {error}
                 </Text>
+                {error.includes('manually') && (
+                  <Text fontSize="sm" color="orange.200" textAlign="center">
+                    Visit keepkey.com/updater to download the official updater tool
+                  </Text>
+                )}
                 <HStack gap={4}>
                   <Button onClick={checkBootloader} colorScheme="red" variant="outline">
-                    Retry
+                    Retry Check
                   </Button>
-                  <Button onClick={handleSkip} variant="outline">
-                    Skip This Step
-                  </Button>
+                  {!bootloaderCheck?.isRequired && (
+                    <Button onClick={handleSkip} variant="outline">
+                      Skip For Now
+                    </Button>
+                  )}
                 </HStack>
               </VStack>
             ) : bootloaderCheck ? (
@@ -196,9 +210,11 @@ export function Step2VerifyBootloader({ onNext, onSkip, deviceId }: StepProps) {
                       </HStack>
                       
                       <Text color="orange.200" textAlign="center" fontSize="sm">
-                        {bootloaderCheck.isRequired 
-                          ? "This update is required for security and compatibility."
-                          : "This update is recommended for improved security and features."
+                        {bootloaderCheck.currentVersion === "0.0.0" 
+                          ? "⚠️ Bootloader version could not be verified. For security, we recommend updating."
+                          : bootloaderCheck.isRequired 
+                            ? "This update is required for security and compatibility."
+                            : "This update is recommended for improved security and features."
                         }
                       </Text>
                       
@@ -236,13 +252,16 @@ export function Step2VerifyBootloader({ onNext, onSkip, deviceId }: StepProps) {
                   <VStack gap={4} p={6} bg="green.900" borderRadius="md" borderWidth="1px" borderColor="green.600">
                     <Icon as={FaCheckCircle} boxSize={12} color="green.400" />
                     <Text fontSize="lg" fontWeight="semibold" color="white">
-                      Bootloader is Up to Date
+                      Bootloader Check Complete
                     </Text>
                     <Text color="green.200" textAlign="center">
-                      Your device's bootloader is current and secure.
+                      {bootloaderCheck.currentVersion === bootloaderCheck.latestVersion 
+                        ? "Your device's bootloader is up to date and secure."
+                        : "No bootloader update required at this time."
+                      }
                     </Text>
                     <Text fontSize="sm" color="gray.400">
-                      Version: {bootloaderCheck.currentVersion}
+                      Current Version: {bootloaderCheck.currentVersion}
                     </Text>
                   </VStack>
                 )}

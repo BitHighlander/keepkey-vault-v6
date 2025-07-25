@@ -22,17 +22,19 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-keepkey_rust = { path = "../../keepkey-usb" }
+tauri = { version = "2.7.0", features = ["devtools"] }
+tauri-plugin-opener = "2.4.0"
+tauri-plugin-sql = { version = "2.3.0", features = ["sqlite"] }
+tauri-plugin-process = "2.3.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
-tauri-plugin-sql = { version = "2", features = ["sqlite"] }
-tauri-plugin-process = "2"
-tokio = { version = "1", features = ["full"] }
-hex = "0.4"
+keepkey_rust = { path = "../../keepkey-usb" }
+keepkey-db = { path = "../../keepkey-db" }
 log = "0.4"
-lazy_static = "1.4"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1.0", features = ["full"] }
+hex = "0.4.3"
+lazy_static = "1.4.0"
+chrono = { version = "0.4", features = ["serde"] }
 

@@ -22,6 +22,7 @@ pub mod commands;
 pub mod features;
 pub mod device_queue;
 pub mod friendly_usb;
+pub mod device_update;
 
 
 
