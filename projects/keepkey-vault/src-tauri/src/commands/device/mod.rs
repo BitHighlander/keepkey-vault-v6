@@ -10,11 +10,13 @@ pub mod get_queue_status;
 pub mod get_blocking_actions;
 pub mod check_device_bootloader;
 pub mod register_device;
+pub mod get_devices_needing_setup;
 
 // Re-export command functions
 pub use get_connected_devices::get_connected_devices;
 pub use get_features::get_features;
 pub use check_device_bootloader::check_device_bootloader;
+pub use get_devices_needing_setup::get_devices_needing_setup;
 
 // TODO: Add re-exports for other device commands as they are implemented
 // pub use get_device_status::get_device_status;

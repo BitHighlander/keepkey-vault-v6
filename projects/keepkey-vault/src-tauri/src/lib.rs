@@ -73,6 +73,7 @@ pub fn run() {
             commands::device::get_features::get_features,
             commands::device::get_connected_devices::get_connected_devices,
             commands::device::check_device_bootloader::check_device_bootloader,
+            commands::device::get_devices_needing_setup::get_devices_needing_setup,
             // Update commands  
             device::updates::update_device_bootloader,
             device::updates::update_device_firmware,

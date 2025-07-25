@@ -9,6 +9,7 @@ use super::get_features::convert_features_to_device_features;
 use crate::device::updates::{check_bootloader_status, FrontendBootloaderCheck, VersionComparison};
 
 /// Check device bootloader status and determine if update is needed
+/// SECURITY: This function MUST fail safe - if bootloader version cannot be determined, it MUST return an error
 #[tauri::command]
 pub async fn check_device_bootloader(
     device_id: String,
@@ -33,33 +34,31 @@ pub async fn check_device_bootloader(
                 log::warn!("Failed to update device features in database: {}", e);
             }
             
-            // Check bootloader status using existing logic
+            // SIMPLE: Try to get bootloader status
             if let Some(bootloader_check) = check_bootloader_status(&device_features) {
-                // Convert internal BootloaderCheck to frontend format
-                let severity = match bootloader_check.comparison {
-                    VersionComparison::MajorBehind => "critical",
-                    VersionComparison::MinorBehind => "high", 
-                    VersionComparison::PatchBehind => "medium",
-                    VersionComparison::Current => "low",
+                // We got a bootloader check result - convert to frontend format
+                let severity = if bootloader_check.is_outdated {
+                    if bootloader_check.is_critical { "critical" } else { "high" }
+                } else {
+                    "low"
                 };
-                
+
+                let needs_update = bootloader_check.is_outdated;
+
+                log::info!("🔒 Bootloader check completed: version={}, needs_update={}, severity={}", 
+                    bootloader_check.current_version, needs_update, severity);
+
                 Ok(FrontendBootloaderCheck {
-                    needs_update: bootloader_check.is_outdated,
+                    needs_update,
                     current_version: bootloader_check.current_version,
                     latest_version: bootloader_check.latest_version,
                     is_required: bootloader_check.is_critical,
                     severity: severity.to_string(),
                 })
             } else {
-                // Device not in bootloader mode - assume bootloader is fine for now
-                // TODO: Add logic to check bootloader version even when not in bootloader mode
-                Ok(FrontendBootloaderCheck {
-                    needs_update: false,
-                    current_version: device_features.version.clone(),
-                    latest_version: device_features.version.clone(),
-                    is_required: false,
-                    severity: "low".to_string(),
-                })
+                // Failed to get bootloader hash
+                log::error!("🚨 SECURITY: Failed to get bootloader hash for device {}", device_id);
+                Err("SECURITY ERROR: Failed to get bootloader hash. Device cannot be verified as secure.".to_string())
             }
         }
         Err(e) => {

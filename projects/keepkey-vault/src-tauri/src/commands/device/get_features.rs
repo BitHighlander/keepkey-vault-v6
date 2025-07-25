@@ -32,6 +32,17 @@ pub async fn get_features(
 
 /// Convert raw Features to DeviceFeatures
 pub fn convert_features_to_device_features(features: keepkey_rust::messages::Features) -> DeviceFeatures {
+    // Log the raw features we're getting from the device
+    log::info!("🔍 Raw device features received:");
+    log::info!("   - firmware version: {}.{}.{}", 
+        features.major_version.unwrap_or(0),
+        features.minor_version.unwrap_or(0), 
+        features.patch_version.unwrap_or(0)
+    );
+    log::info!("   - bootloader_mode: {:?}", features.bootloader_mode);
+    log::info!("   - bootloader_hash (raw): {:?}", features.bootloader_hash);
+    log::info!("   - firmware_hash (raw): {:?}", features.firmware_hash);
+    
     // First create the basic device features
     let mut device_features = DeviceFeatures {
         vendor: Some(features.vendor.unwrap_or_default()),
@@ -63,9 +74,16 @@ pub fn convert_features_to_device_features(features: keepkey_rust::messages::Fea
             .collect(),
     };
 
+    // Log what we've converted so far
+    log::info!("🔍 Converted device features (before bootloader version):");
+    log::info!("   - firmware_hash (hex): {:?}", device_features.firmware_hash);
+    log::info!("   - bootloader_hash (hex): {:?}", device_features.bootloader_hash);
+
     // Set the bootloader version using our determining logic
     let bootloader_version = determine_bootloader_version(&device_features);
-    device_features.bootloader_version = Some(bootloader_version);
+    device_features.bootloader_version = Some(bootloader_version.clone());
+    
+    log::info!("🔍 Final bootloader version determined: {}", bootloader_version);
     
     device_features
 } 

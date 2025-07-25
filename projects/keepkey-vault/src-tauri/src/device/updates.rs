@@ -4,6 +4,7 @@ use tauri::State;
 use serde::{Serialize, Deserialize};
 use keepkey_rust::features::DeviceFeatures;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use crate::commands::DeviceQueueManager;
 
 // Bootloader update types
@@ -33,54 +34,101 @@ pub struct FrontendBootloaderCheck {
     pub severity: String, // 'low' | 'medium' | 'high' | 'critical'
 }
 
-/// Check bootloader status with proper version logic
-/// Defaults to "needs update" if bootloader version cannot be determined for security
+// Releases.json structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReleasesData {
+    pub latest: LatestVersions,
+    pub hashes: HashMappings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LatestVersions {
+    pub bootloader: BootloaderVersionInfo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BootloaderVersionInfo {
+    pub version: String,
+    pub hash: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HashMappings {
+    pub bootloader: HashMap<String, String>,
+}
+
+/// Load releases.json and map bootloader hash to version
+pub fn bootloader_version_from_hash(hash: &str) -> Option<String> {
+    // Load releases.json from the firmware directory
+    let releases_path = std::path::PathBuf::from("firmware/releases.json");
+    
+    match std::fs::read_to_string(&releases_path) {
+        Ok(json_str) => {
+            match serde_json::from_str::<ReleasesData>(&json_str) {
+                Ok(releases) => {
+                    if let Some(version) = releases.hashes.bootloader.get(hash) {
+                        // Clean up version string (remove 'v' prefix if present)
+                        let clean_version = version.trim_start_matches('v');
+                        log::info!("🔍 Mapped bootloader hash {} to version {}", &hash[..8], clean_version);
+                        Some(clean_version.to_string())
+                    } else {
+                        log::warn!("⚠️ No bootloader version found for hash {}", &hash[..8]);
+                        None
+                    }
+                }
+                Err(e) => {
+                    log::error!("❌ Failed to parse releases.json: {}", e);
+                    None
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("❌ Failed to load releases.json from {:?}: {}", releases_path, e);
+            None
+        }
+    }
+}
+
+/// Check device bootloader status and determine if update is needed
+/// SIMPLE: No hash = error, hash = 2.1.4 = success, otherwise needs update
 pub fn check_bootloader_status(features: &DeviceFeatures) -> Option<BootloaderCheck> {
-    let latest_bootloader_version = "2.1.4".to_string(); // Latest official bootloader version
+    let latest_bootloader_version = "2.1.4".to_string();
     
-    // Determine current bootloader version based on device state and mode
-    let current_bootloader_version = if features.bootloader_mode {
-        // Device is in bootloader mode - use the firmware version as bootloader version
-        if features.version.starts_with("1.") {
-            features.version.clone() // OOB bootloader versions like 1.0.3
-        } else {
-            // Modern bootloader in bootloader mode - use version directly
-            features.version.clone()
-        }
+    // Get the bootloader version (which should be the hash)
+    let current_bootloader_version = if let Some(ref bl_version) = features.bootloader_version {
+        bl_version.clone()
     } else {
-        // Device is in normal firmware mode - check if it's an OOB device
-        if features.version.starts_with("1.0.") {
-            // OOB device: firmware version 1.0.3 = bootloader version 1.0.3
-            features.version.clone()
-        } else if let Some(ref bl_version) = features.bootloader_version {
-            // Use explicit bootloader version if available
-            bl_version.clone()
-        } else {
-            // SECURITY DEFAULT: If we can't determine bootloader version, assume it needs update
-            // This is safer than assuming it's current
-            "0.0.0".to_string() // This will trigger "needs update"
-        }
+        "NO_BOOTLOADER_HASH".to_string()
     };
     
-    // Compare versions using semantic versioning
-    let comparison = match compare_versions(&current_bootloader_version, &latest_bootloader_version) {
-        Ok(comp) => comp,
-        Err(_) => {
-            // If version comparison fails, assume needs update for security
-            VersionComparison::MajorBehind
-        }
-    };
+    log::info!("🔒 Simple bootloader check: current='{}', latest='{}'", current_bootloader_version, latest_bootloader_version);
     
-    let is_outdated = !matches!(comparison, VersionComparison::Current);
-    let is_critical = matches!(comparison, VersionComparison::MajorBehind);
-    
-    Some(BootloaderCheck {
-        current_version: current_bootloader_version,
-        latest_version: latest_bootloader_version.clone(),
-        is_outdated,
-        is_critical,
-        comparison,
-    })
+    // SIMPLE logic:
+    if current_bootloader_version == "NO_BOOTLOADER_HASH" {
+        // Failed to get bootloader hash
+        log::error!("🚨 Failed to get bootloader hash");
+        return None; // This will cause an error in the calling function
+    } else if current_bootloader_version == latest_bootloader_version {
+        // Valid bootloader version
+        log::info!("✅ Valid bootloader version: {}", current_bootloader_version);
+        Some(BootloaderCheck {
+            current_version: current_bootloader_version,
+            latest_version: latest_bootloader_version,
+            is_outdated: false,
+            is_critical: false,
+            comparison: VersionComparison::Current,
+        })
+    } else {
+        // Bootloader needs update
+        log::info!("📋 Bootloader version: {} (needs update to {})", current_bootloader_version, latest_bootloader_version);
+        Some(BootloaderCheck {
+            current_version: current_bootloader_version,
+            latest_version: latest_bootloader_version,
+            is_outdated: true,
+            is_critical: true,
+            comparison: VersionComparison::MajorBehind,
+        })
+    }
 }
 
 /// Compare two semantic versions
@@ -112,31 +160,28 @@ pub fn compare_versions(current: &str, latest: &str) -> Result<VersionComparison
 }
 
 /// Determine bootloader version for device features during conversion
+/// SIMPLE: Just return the bootloader hash if available, otherwise error state
 pub fn determine_bootloader_version(device_features: &DeviceFeatures) -> String {
-    let latest_bootloader_version = "2.1.4".to_string();
+    log::info!("🔍 determine_bootloader_version called for device:");
+    log::info!("   - firmware_version: {}", device_features.version);
+    log::info!("   - bootloader_mode: {}", device_features.bootloader_mode);
+    log::info!("   - bootloader_hash: {:?}", device_features.bootloader_hash);
     
-    if device_features.bootloader_mode {
-        // Device is in bootloader mode - use the firmware version as bootloader version
-        if device_features.version.starts_with("1.") {
-            device_features.version.clone() // OOB bootloader versions like 1.0.3
+    // If we have bootloader hash, try to map it to a version
+    if let Some(ref bl_hash) = device_features.bootloader_hash {
+        log::info!("📋 Bootloader hash found: {}", bl_hash);
+        
+        // Try to map hash to version
+        if let Some(version) = bootloader_version_from_hash(bl_hash) {
+            log::info!("✅ Successfully mapped hash to version: {}", version);
+            version
         } else {
-            // Modern bootloader in bootloader mode - use version directly
-            device_features.version.clone()
+            log::warn!("⚠️ Hash not found in releases.json, returning hash as version");
+            bl_hash.clone() // Fallback to hash if not found in mapping
         }
     } else {
-        // Device is in normal firmware mode - check if it's an OOB device
-        if device_features.version.starts_with("1.0.") {
-            // OOB device: firmware version 1.0.3 = bootloader version 1.0.3
-            device_features.version.clone()
-        } else if let Some(ref bl_hash) = device_features.bootloader_hash {
-            // For modern devices, try to use the bootloader hash
-            // TODO: Could implement hash-to-version mapping here
-            bl_hash.clone()
-        } else {
-            // SECURITY DEFAULT: If we can't determine bootloader version, assume it needs update
-            // This is safer than assuming it's current
-            "0.0.0".to_string() // This will trigger "needs update"
-        }
+        log::error!("🚨 Failed to get bootloader hash");
+        "NO_BOOTLOADER_HASH".to_string() // Clear error marker
     }
 }
 

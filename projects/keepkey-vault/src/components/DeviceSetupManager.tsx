@@ -21,6 +21,8 @@ export function DeviceSetupManager({}: DeviceSetupManagerProps) {
   useEffect(() => {
     let isMounted = true;
 
+    console.log('🔧 DeviceSetupManager: Setting up listeners...');
+
     // Check for incomplete devices on app startup
     const checkIncompleteDevices = async () => {
       try {
@@ -49,9 +51,38 @@ export function DeviceSetupManager({}: DeviceSetupManagerProps) {
       }
     };
 
+    // Check for devices that need setup (fallback check after frontend_ready)
+    const checkDevicesThatNeedSetup = async () => {
+      try {
+        console.log('🔍 DeviceSetupManager: Checking for devices that need setup...');
+        const devicesThatNeedSetup = await invoke<Array<{ device_id: string; device_name: string; serial_number: string }>>('get_devices_needing_setup');
+        
+        if (devicesThatNeedSetup.length > 0 && isMounted) {
+          console.log(`📋 Found ${devicesThatNeedSetup.length} device(s) that need setup:`, devicesThatNeedSetup);
+          
+          // Launch setup for the first device that needs setup
+          const device = devicesThatNeedSetup[0];
+          if (!managedDevices.has(device.device_id)) {
+            console.log(`🚀 Launching setup for device: ${device.device_id}`);
+            
+            setManagedDevices(prev => new Set([...prev, device.device_id]));
+            showSetup({ 
+              initialDeviceId: device.device_id,
+              mandatory: true,
+              deviceName: device.device_name,
+              serialNumber: device.serial_number
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check devices that need setup:', error);
+      }
+    };
+
     // Listen for setup-required events from newly connected devices
     const setupEventListener = async () => {
       try {
+        console.log('🎯 DeviceSetupManager: Setting up device:setup-required listener...');
         const unlisten = await listen('device:setup-required', (event: any) => {
           const { device_id, device_name, serial_number } = event.payload;
           
@@ -104,18 +135,45 @@ export function DeviceSetupManager({}: DeviceSetupManagerProps) {
       }
     };
 
+    // Listen for frontend ready events to trigger fallback checks
+    const frontendReadyListener = async () => {
+      try {
+        console.log('🎯 DeviceSetupManager: Setting up frontend-ready listener for fallback checks...');
+        const unlisten = await listen('frontend:ready', async () => {
+          console.log('🎯 DeviceSetupManager: Frontend ready detected, running fallback setup checks...');
+          // Add a small delay to ensure all events have been processed
+          setTimeout(async () => {
+            await checkDevicesThatNeedSetup();
+          }, 500);
+        });
+
+        return unlisten;
+      } catch (error) {
+        console.error('Failed to set up frontend ready listener:', error);
+        return () => {};
+      }
+    };
+
     // Initialize everything
     const initialize = async () => {
       // Check for incomplete devices first
       await checkIncompleteDevices();
       
-      // Set up event listeners
+      // Set up event listeners IMMEDIATELY
       const unlistenSetupRequired = await setupEventListener();
       const unlistenSetupComplete = await setupCompleteListener();
+      const unlistenFrontendReady = await frontendReadyListener();
+      
+      // Run an immediate fallback check in case events were already sent
+      setTimeout(async () => {
+        console.log('🔍 DeviceSetupManager: Running immediate fallback check...');
+        await checkDevicesThatNeedSetup();
+      }, 100);
       
       return () => {
         unlistenSetupRequired();
         unlistenSetupComplete();
+        unlistenFrontendReady();
       };
     };
 
