@@ -2932,10 +2932,11 @@ dependencies = [
 
 [[package]]
 name = "keepkey-vault"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "hex",
  "keepkey_rust",
+ "log",
  "serde",
  "serde_json",
  "tauri",
@@ -2944,6 +2945,8 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-sql",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -3087,6 +3090,7 @@ version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
+ "cc",
  "pkg-config",
  "vcpkg",
 ]
@@ -5378,6 +5382,8 @@ dependencies = [
  "smallvec",
  "thiserror 2.0.12",
  "time",
+ "tokio",
+ "tokio-stream",
  "tracing",
  "url",
 ]
@@ -5416,6 +5422,7 @@ dependencies = [
  "sqlx-postgres",
  "sqlx-sqlite",
  "syn 2.0.104",
+ "tokio",
  "url",
 ]
 

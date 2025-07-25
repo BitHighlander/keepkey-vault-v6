@@ -260,12 +260,13 @@ export const KeepKeyDeviceList = ({
         </HStack>
         <IconButton
           aria-label="Refresh devices"
-          icon={<FaSync />}
           size="sm"
           variant="ghost"
           colorScheme="blue"
           onClick={loadDevices}
-        />
+        >
+          <FaSync />
+        </IconButton>
       </HStack>
       
       {devices.map((device) => (
