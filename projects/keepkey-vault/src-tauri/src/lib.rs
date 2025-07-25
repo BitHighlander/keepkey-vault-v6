@@ -63,6 +63,15 @@ pub fn run() {
             commands::debug_onboarding_state,
             commands::get_preference,
             commands::set_preference,
+            commands::register_device,
+            commands::get_device_registry,
+            commands::get_device_from_registry,
+            commands::update_device_setup_step,
+            commands::mark_device_setup_complete,
+            commands::device_needs_setup,
+            commands::get_incomplete_setup_devices,
+            commands::reset_device_setup,
+            commands::get_device_eth_address,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -92,6 +101,45 @@ async fn start_usb_monitoring(app_handle: tauri::AppHandle, device_queue_manager
                     
                     // Find the full device info for this connected device
                     if let Some(device) = current_device_list.iter().find(|d| &d.unique_id == device_id) {
+                        // Register device in the database
+                        if let Ok(db) = keepkey_rust::index_db::IndexDb::open() {
+                            let serial_number = device.serial_number.as_deref();
+                            let features_json = serde_json::to_string(&device).ok();
+                            
+                            if let Err(e) = db.register_device(device_id, serial_number, features_json.as_deref()) {
+                                log::error!("Failed to register device in registry: {}", e);
+                            } else {
+                                log::info!("📝 Registered device in registry: {}", device_id);
+                            }
+                            
+                            // Check if device needs setup
+                            match db.device_needs_setup(device_id) {
+                                Ok(needs_setup) => {
+                                    if needs_setup {
+                                        log::info!("⚠️  Device {} needs setup - will emit setup-required event", device_id);
+                                        
+                                        // Emit setup-required event
+                                        if let Err(e) = commands::emit_or_queue_event(
+                                            &app_handle,
+                                            "device:setup-required",
+                                            serde_json::json!({
+                                                "device_id": device_id,
+                                                "device_name": device.name,
+                                                "serial_number": device.serial_number
+                                            })
+                                        ).await {
+                                            log::error!("Failed to emit setup-required event: {}", e);
+                                        }
+                                    } else {
+                                        log::info!("✅ Device {} setup is complete", device_id);
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("Failed to check setup status for device {}: {}", device_id, e);
+                                }
+                            }
+                        }
+                        
                         // Emit device:connected event with full device info using emit_or_queue_event
                         let device_payload = serde_json::json!({
                             "unique_id": device.unique_id,

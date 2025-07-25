@@ -3,10 +3,12 @@ import { useCallback } from 'react';
 import React from 'react';
 import { OnboardingWizard } from '../components/OnboardingWizard/OnboardingWizard';
 import { WalletCreationWizard } from '../components/WalletCreationWizard/WalletCreationWizard';
+import { SetupWizard } from '../components/SetupWizard/SetupWizard';
 
 // Import dialog components dynamically
 const dialogComponents = {
   onboarding: () => import('../components/OnboardingWizard/OnboardingWizard').then(m => ({ default: m.OnboardingWizard })),
+  setup: () => import('../components/SetupWizard/SetupWizard').then(m => ({ default: m.SetupWizard })),
   settings: () => import('../components/SettingsDialog').then(m => ({ default: m.SettingsDialog })),
   walletCreation: () => import('../components/WalletCreationWizard/WalletCreationWizard').then(m => ({ default: m.WalletCreationWizard })),
   // Add more dialog imports as needed
@@ -19,6 +21,22 @@ export function useCommonDialogs() {
     show({
       id: 'onboarding',
       component: OnboardingWizard, // Direct component instead of lazy loading for testing
+      props,
+      priority: 'high',
+      persistent: true,
+      onOpen: () => {
+        requestAppFocus();
+      },
+      onClose: () => {
+        releaseAppFocus();
+      },
+    });
+  }, [show, requestAppFocus, releaseAppFocus]);
+  
+  const showSetup = useCallback((props?: any) => {
+    show({
+      id: 'setup-wizard',
+      component: SetupWizard, // Direct component instead of lazy loading for testing
       props,
       priority: 'high',
       persistent: true,
@@ -88,6 +106,7 @@ export function useCommonDialogs() {
   
   return {
     showOnboarding,
+    showSetup,
     showSettings,
     showWalletCreation,
     showError,

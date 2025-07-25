@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use keepkey_rust::{
     device_queue::{DeviceQueueFactory, DeviceQueueHandle},
     features::DeviceFeatures,
+    index_db::IndexDb,
 };
 use tauri::{AppHandle, Emitter};
 use serde::{Serialize, Deserialize};
@@ -354,7 +355,6 @@ pub async fn get_preference(key: String) -> Result<Option<String>, String> {
 #[tauri::command]
 pub async fn set_preference(key: String, value: String) -> Result<(), String> {
     let mut config = load_config()?;
-    
     if let Some(obj) = config.as_object_mut() {
         // Try to parse as different types
         let parsed_value = if value == "true" || value == "false" {
@@ -364,12 +364,123 @@ pub async fn set_preference(key: String, value: String) -> Result<(), String> {
         } else {
             serde_json::Value::String(value)
         };
-        
         obj.insert(key, parsed_value);
     }
-    
     save_config(&config)?;
     Ok(())
+}
+
+// ============ Device Registry Commands ============
+
+/// Register a device in the registry
+#[tauri::command]
+pub async fn register_device(
+    device_id: String,
+    serial_number: Option<String>,
+    features: Option<String>,
+) -> Result<(), String> {
+    let db = IndexDb::open().map_err(|e| e.to_string())?;
+    db.register_device(&device_id, serial_number.as_deref(), features.as_deref())
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Get all devices in the registry
+#[tauri::command]
+pub async fn get_device_registry() -> Result<Vec<serde_json::Value>, String> {
+    let db = IndexDb::open().map_err(|e| e.to_string())?;
+    db.get_device_registry().map_err(|e| e.to_string())
+}
+
+/// Get a specific device from the registry
+#[tauri::command]
+pub async fn get_device_from_registry(device_id: String) -> Result<Option<serde_json::Value>, String> {
+    let db = IndexDb::open().map_err(|e| e.to_string())?;
+    db.get_device_by_id(&device_id).map_err(|e| e.to_string())
+}
+
+/// Update setup step for a device
+#[tauri::command]
+pub async fn update_device_setup_step(device_id: String, step: i32) -> Result<(), String> {
+    let db = IndexDb::open().map_err(|e| e.to_string())?;
+    db.update_device_setup_step(&device_id, step)
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Mark device setup as complete
+#[tauri::command]
+pub async fn mark_device_setup_complete(
+    device_id: String,
+    eth_address: Option<String>,
+) -> Result<(), String> {
+    let db = IndexDb::open().map_err(|e| e.to_string())?;
+    db.mark_device_setup_complete(&device_id, eth_address.as_deref())
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Check if a device needs setup
+#[tauri::command]
+pub async fn device_needs_setup(device_id: String) -> Result<bool, String> {
+    let db = IndexDb::open().map_err(|e| e.to_string())?;
+    db.device_needs_setup(&device_id).map_err(|e| e.to_string())
+}
+
+/// Get devices with incomplete setup
+#[tauri::command]
+pub async fn get_incomplete_setup_devices() -> Result<Vec<serde_json::Value>, String> {
+    let db = IndexDb::open().map_err(|e| e.to_string())?;
+    db.get_incomplete_setup_devices().map_err(|e| e.to_string())
+}
+
+/// Reset device setup (for testing/debugging)
+#[tauri::command]
+pub async fn reset_device_setup(device_id: String) -> Result<(), String> {
+    let db = IndexDb::open().map_err(|e| e.to_string())?;
+    db.reset_device_setup(&device_id).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Get ETH address for a device (if available)
+#[tauri::command]
+pub async fn get_device_eth_address(
+    device_id: String,
+    queue_manager: State<'_, DeviceQueueManager>,
+) -> Result<Option<String>, String> {
+    // First check if we have it cached in the registry
+    let db = IndexDb::open().map_err(|e| e.to_string())?;
+    if let Some(device) = db.get_device_by_id(&device_id).map_err(|e| e.to_string())? {
+        if let Some(eth_address) = device.get("eth_address").and_then(|v| v.as_str()) {
+            if !eth_address.is_empty() {
+                return Ok(Some(eth_address.to_string()));
+            }
+        }
+    }
+    
+    // If not cached, try to get it from the device
+    println!("🔍 Getting ETH address for device: {}", device_id);
+    
+    let manager = queue_manager.lock().await;
+    let queue = manager.get(&device_id)
+        .ok_or_else(|| format!("Device queue not found for device: {}", device_id))?;
+    
+    // Get ETH address for the standard derivation path
+    let address_n = vec![44 + 0x80000000, 60 + 0x80000000, 0 + 0x80000000, 0, 0]; // m/44'/60'/0'/0/0
+    
+    match queue.get_address(address_n, "Ethereum".to_string(), None, Some(false)).await {
+        Ok(address) => {
+            // Cache the address in the database
+            if let Err(e) = IndexDb::open().map_err(|e| e.to_string())?.mark_device_setup_complete(&device_id, Some(&address)) {
+                log::warn!("Failed to cache ETH address: {}", e);
+            }
+            Ok(Some(address))
+        }
+        Err(e) => {
+            println!("❌ Failed to get ETH address: {}", e);
+            Ok(None)
+        }
+    }
 }
 
 /// Check if device is ready and handle onboarding status

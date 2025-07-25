@@ -10,6 +10,7 @@ import { EllipsisDots } from "./components/EllipsisSpinner";
 import { SettingsDialog, SettingsButton } from './components/SettingsDialog';
 import { useCommonDialogs } from './hooks/useCommonDialogs';
 import { DeviceUpdateManager } from './components/DeviceUpdateManager';
+import { DeviceSetupManager } from './components/DeviceSetupManager';
 import { useOnboardingState } from './hooks/useOnboardingState';
 // import { VaultInterface } from './components/VaultInterface';
 import { DialogProvider, useDialog } from './contexts/DialogContext'
@@ -447,6 +448,9 @@ function App() {
                     <DeviceUpdateManager
                         onComplete={handleDeviceUpdateComplete}
                     />
+
+                    {/* Device setup manager - handles mandatory setup for new devices */}
+                    <DeviceSetupManager />
                 </Flex>
             </Box>
         );
