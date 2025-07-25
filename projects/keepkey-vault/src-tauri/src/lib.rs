@@ -61,6 +61,8 @@ pub fn run() {
             commands::is_onboarded,
             commands::set_onboarding_completed,
             commands::debug_onboarding_state,
+            commands::get_preference,
+            commands::set_preference,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

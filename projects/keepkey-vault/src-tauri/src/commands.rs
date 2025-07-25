@@ -334,6 +334,44 @@ pub async fn debug_onboarding_state() -> Result<String, String> {
     Ok(format!("Config: {}", serde_json::to_string_pretty(&config).unwrap_or_else(|_| "Unable to serialize".to_string())))
 }
 
+/// Get a preference value
+#[tauri::command]
+pub async fn get_preference(key: String) -> Result<Option<String>, String> {
+    let config = load_config()?;
+    
+    let value = config.get(&key)
+        .and_then(|v| match v {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Bool(b) => Some(b.to_string()),
+            serde_json::Value::Number(n) => Some(n.to_string()),
+            _ => None,
+        });
+    
+    Ok(value)
+}
+
+/// Set a preference value
+#[tauri::command]
+pub async fn set_preference(key: String, value: String) -> Result<(), String> {
+    let mut config = load_config()?;
+    
+    if let Some(obj) = config.as_object_mut() {
+        // Try to parse as different types
+        let parsed_value = if value == "true" || value == "false" {
+            serde_json::Value::Bool(value == "true")
+        } else if let Ok(num) = value.parse::<i64>() {
+            serde_json::Value::Number(serde_json::Number::from(num))
+        } else {
+            serde_json::Value::String(value)
+        };
+        
+        obj.insert(key, parsed_value);
+    }
+    
+    save_config(&config)?;
+    Ok(())
+}
+
 /// Check if device is ready and handle onboarding status
 pub async fn check_device_ready_and_onboarding(device_id: &str, app: &AppHandle, queue_manager: &DeviceQueueManager) -> Result<(), String> {
     log::info!("🔍 Checking device readiness and onboarding status for device: {}", device_id);
