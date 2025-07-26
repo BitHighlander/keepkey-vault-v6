@@ -169,7 +169,7 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
   useEffect(() => {
     let featuresUnsubscribe: Promise<() => void> | null = null
     let connectedUnsubscribe: Promise<() => void> | null = null
-    let timeoutId: NodeJS.Timeout | null = null
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
 
     const setupListeners = async () => {
       console.log('DeviceUpdateManager: Setting up event listeners...')

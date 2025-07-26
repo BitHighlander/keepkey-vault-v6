@@ -65,7 +65,7 @@ export const SettingsDialog = ({ isOpen, onClose }: SettingsDialogProps) => {
   const [logLimit, setLogLimit] = useState<number>(50)
   const [logPath, setLogPath] = useState<string>('')
   const [autoRefresh, setAutoRefresh] = useState<boolean>(false)
-  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null)
+  const [refreshInterval, setRefreshInterval] = useState<ReturnType<typeof setInterval> | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   
   // Toast notification state
