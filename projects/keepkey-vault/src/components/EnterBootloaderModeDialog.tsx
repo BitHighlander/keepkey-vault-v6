@@ -8,22 +8,39 @@ import {
 } from '@chakra-ui/react'
 import { VStack, Text, Box, Button, HStack } from '@chakra-ui/react'
 import { FaTimes, FaExclamationTriangle } from 'react-icons/fa'
-import type { BootloaderCheck } from '../types/device'
+import type { BootloaderCheck, FirmwareCheck } from '../types/device'
 
 // Import the SVG image for the hold-and-connect instructions
 import holdAndConnectSvg from '../assets/svg/hold-and-connect.svg'
 
 interface EnterBootloaderModeDialogProps {
   isOpen: boolean
-  bootloaderCheck: BootloaderCheck
+  updateType: 'bootloader' | 'firmware'
+  bootloaderCheck?: BootloaderCheck
+  firmwareCheck?: FirmwareCheck
   onClose: () => void
 }
 
 export const EnterBootloaderModeDialog = ({ 
   isOpen, 
+  updateType,
   bootloaderCheck, 
+  firmwareCheck,
   onClose 
 }: EnterBootloaderModeDialogProps) => {
+  // Determine update details based on type
+  const updateDetails = updateType === 'bootloader' 
+    ? {
+        title: 'Enter Bootloader Mode',
+        description: bootloaderCheck ? `Bootloader update available: v${bootloaderCheck.currentVersion} → v${bootloaderCheck.latestVersion}` : 'Bootloader update available',
+        updateContext: 'bootloader'
+      }
+    : {
+        title: 'Enter Bootloader Mode',
+        description: firmwareCheck ? `Firmware update available: v${firmwareCheck.currentVersion} → v${firmwareCheck.latestVersion}` : 'Firmware update available',
+        updateContext: 'firmware'
+      }
+
   return (
     <DialogRoot open={isOpen} onOpenChange={({ open }) => !open && onClose()}>
       <DialogContent 
@@ -37,7 +54,7 @@ export const EnterBootloaderModeDialog = ({
         <DialogHeader borderBottomWidth="1px" borderColor="gray.700" pb={3}>
           <HStack gap={2}>
             <FaExclamationTriangle color="yellow" />
-            <DialogTitle color="white" fontSize="lg">Enter Bootloader Mode</DialogTitle>
+            <DialogTitle color="white" fontSize="lg">{updateDetails.title}</DialogTitle>
           </HStack>
           <DialogCloseTrigger color="gray.400" _hover={{ color: "white" }}>
             <FaTimes />
@@ -47,11 +64,11 @@ export const EnterBootloaderModeDialog = ({
         <DialogBody py={4}>
           <VStack align="stretch" gap={3}>
             <Text fontSize="sm" color="gray.300" textAlign="center">
-              Bootloader update available: v{bootloaderCheck.currentVersion} → v{bootloaderCheck.latestVersion}
+              {updateDetails.description}
             </Text>
             
             <Text fontSize="sm" color="gray.300" textAlign="center">
-              To update, your device must be in <Text as="span" fontWeight="bold" color="yellow.300">Bootloader Mode</Text>
+              To update your {updateDetails.updateContext}, your device must be in <Text as="span" fontWeight="bold" color="yellow.300">Bootloader Mode</Text>
             </Text>
 
             <Box display="flex" justifyContent="center" py={4}>

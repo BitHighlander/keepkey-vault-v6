@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use crate::commands::DeviceQueueManager;
 use super::get_or_create_device_queue;
 use tauri::State;
+use keepkey_rust::features::DeviceFeatures;
+use std::fs;
+use std::path::Path;
 
 // DeviceStatus and related structs
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +62,14 @@ pub fn evaluate_device_status(device_id: String, features: Option<&keepkey_rust:
         initialization_check: None,
     };
     
+    // If we can't get device features, the device is not properly accessible
+    if features.is_none() {
+        log::warn!("Device {} features unavailable - device may be disconnected or inaccessible", device_id);
+        status.connected = false;
+        // Don't set any firmware or bootloader checks since we can't read the device
+        return status;
+    }
+    
     if let Some(features) = features {
         let latest_bootloader_version = "2.1.4".to_string();
         
@@ -92,11 +103,22 @@ pub fn evaluate_device_status(device_id: String, features: Option<&keepkey_rust:
         });
         
         // Check firmware status
-        let needs_firmware_update = features.bootloader_mode && !needs_bootloader_update;
+        let latest_firmware_version = get_latest_firmware_version().unwrap_or_else(|_| "7.10.0".to_string());
+        let needs_firmware_update = if features.bootloader_mode {
+            // In bootloader mode, firmware might need update - compare current to latest
+            // Note: In bootloader mode, version might be bootloader version, not firmware version
+            // For safety, assume firmware needs update if we're already in bootloader mode
+            // unless we can confirm it's already the latest
+            !needs_bootloader_update && is_version_older(&features.version, &latest_firmware_version)
+        } else {
+            // In normal mode, compare current firmware version to latest
+            is_version_older(&features.version, &latest_firmware_version)
+        };
+        
         status.needs_firmware_update = needs_firmware_update;
         status.firmware_check = Some(FirmwareCheck {
             current_version: features.version.clone(),
-            latest_version: "4.0.0".to_string(), // Current latest firmware
+            latest_version: latest_firmware_version,
             needs_update: needs_firmware_update,
         });
         
@@ -118,6 +140,62 @@ pub fn evaluate_device_status(device_id: String, features: Option<&keepkey_rust:
     status
 }
 
+/// Helper function to read latest firmware version from releases.json
+fn get_latest_firmware_version() -> Result<String, String> {
+    let possible_paths = [
+        "firmware/releases.json",
+        "./firmware/releases.json", 
+        "../firmware/releases.json",
+        "../../firmware/releases.json",
+    ];
+    
+    for path in &possible_paths {
+        if Path::new(path).exists() {
+            if let Ok(contents) = fs::read_to_string(path) {
+                if let Ok(releases) = serde_json::from_str::<serde_json::Value>(&contents) {
+                    if let Some(version) = releases["latest"]["firmware"]["version"].as_str() {
+                        // Remove 'v' prefix if present
+                        let clean_version = version.trim_start_matches('v');
+                        return Ok(clean_version.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback to known latest version if releases.json not found
+    Ok("7.10.0".to_string())
+}
+
+/// Helper function to compare semantic versions
+fn is_version_older(current: &str, latest: &str) -> bool {
+    let current_parts: Vec<u32> = current.trim_start_matches('v')
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    let latest_parts: Vec<u32> = latest.trim_start_matches('v')
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    
+    // Pad with zeros if needed
+    let max_len = current_parts.len().max(latest_parts.len());
+    let mut current_padded = current_parts.clone();
+    let mut latest_padded = latest_parts.clone();
+    current_padded.resize(max_len, 0);
+    latest_padded.resize(max_len, 0);
+    
+    for (curr, latest) in current_padded.iter().zip(latest_padded.iter()) {
+        if curr < latest {
+            return true;
+        } else if curr > latest {
+            return false;
+        }
+    }
+    
+    false // Versions are equal
+}
+
 /// Get device status command
 #[tauri::command]
 pub async fn get_device_status(
@@ -126,19 +204,31 @@ pub async fn get_device_status(
 ) -> Result<Option<DeviceStatus>, String> {
     log::info!("Getting device status for: {}", device_id);
     
+    // Resolve to canonical device ID in case this is an alias
+    let canonical_id = crate::commands::get_canonical_device_id(&device_id);
+    log::info!("Canonical device ID: {}", canonical_id);
+    
     // Get connected devices to find the one we want
     let devices = keepkey_rust::features::list_connected_devices();
     
-    // Find device by exact ID match
+    // Find device by exact ID match or potential same device
     let actual_device_to_check = devices.iter()
-        .find(|d| d.unique_id == device_id)
+        .find(|d| d.unique_id == canonical_id || 
+                  crate::commands::are_devices_potentially_same(&d.unique_id, &canonical_id))
         .cloned();
     
     if let Some(device_info) = actual_device_to_check {
         log::info!("🔍 Found device for status check: {}", device_info.unique_id);
         
-        // Get or create device queue handle
-        let queue_handle = get_or_create_device_queue(&device_id, &queue_manager).await?;
+        // If the device ID is different from what we started with, set up alias
+        if device_info.unique_id != device_id && device_info.unique_id != canonical_id {
+            log::info!("Setting up device alias: {} -> {}", device_info.unique_id, canonical_id);
+            let _ = crate::commands::add_recovery_device_alias(&device_info.unique_id, &canonical_id);
+        }
+        
+        // Get or create device queue handle - use the canonical device ID for queue management
+        // This ensures temporary disconnection tracking works properly
+        let queue_handle = get_or_create_device_queue(&canonical_id, &queue_manager).await?;
         
         // Fetch device features through the queue
         let features = match tokio::time::timeout(
@@ -150,21 +240,21 @@ pub async fn get_device_status(
                 Some(crate::commands::device::get_features::convert_features_to_device_features(raw_features))
             }
             Ok(Err(e)) => {
-                log::error!("Failed to get features for device {}: {}", device_id, e);
+                log::error!("Failed to get features for device {}: {}", device_info.unique_id, e);
                 None
             }
             Err(_) => {
-                log::error!("Timeout getting features for device {}", device_id);
+                log::error!("Timeout getting features for device {}", device_info.unique_id);
                 None
             }
         };
         
-        // Evaluate device status
+        // Evaluate device status - use the original device_id for consistency
         let status = evaluate_device_status(device_id.clone(), features.as_ref());
         
         Ok(Some(status))
     } else {
-        log::warn!("Device {} not found", device_id);
+        log::warn!("Device {} not found (canonical: {})", device_id, canonical_id);
         Ok(None)
     }
 } 

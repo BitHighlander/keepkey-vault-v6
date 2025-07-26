@@ -232,6 +232,12 @@ pub async fn update_device_firmware(
         eprintln!("Failed to log firmware update request: {}", e);
     }
     
+    // Mark device as being in recovery/firmware update flow
+    if let Err(e) = crate::commands::mark_device_in_recovery_flow(&device_id) {
+        log::error!("Failed to mark device in recovery flow: {}", e);
+        // Don't fail the update, just log the error
+    }
+    
     // Validate target version
     let _target_semver = Version::parse(&target_version)
         .map_err(|e| format!("Invalid target firmware version: {}", e))?;
@@ -363,6 +369,11 @@ pub async fn update_device_firmware(
                 eprintln!("Failed to log firmware update success response: {}", e);
             }
             
+            // Clear recovery flow marking on success
+            if let Err(e) = crate::commands::unmark_device_in_recovery_flow(&device_id) {
+                log::error!("Failed to unmark device from recovery flow: {}", e);
+            }
+            
             Ok(success)
         }
         Err(e) => {
@@ -377,6 +388,11 @@ pub async fn update_device_firmware(
             
             if let Err(e) = log_device_response(&device_id, &request_id, false, &response_data, Some(&error_msg)).await {
                 eprintln!("Failed to log firmware update error response: {}", e);
+            }
+            
+            // Clear recovery flow marking on error
+            if let Err(e) = crate::commands::unmark_device_in_recovery_flow(&device_id) {
+                log::error!("Failed to unmark device from recovery flow: {}", e);
             }
             
             Err(format!("Firmware update failed: {}", error_msg))

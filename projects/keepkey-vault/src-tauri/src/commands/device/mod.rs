@@ -42,19 +42,45 @@ pub async fn get_or_create_device_queue(
     
     // Check if we already have a queue for the requested deviceId
     if let Some(existing_handle) = manager.get(device_id) {
-        return Ok(existing_handle.clone());
+        // Check if device was temporarily disconnected - if so, we need a fresh queue
+        if crate::commands::was_device_temporarily_disconnected(device_id) {
+            log::info!("🔄 Device {} was temporarily disconnected - recreating queue for fresh transport", device_id);
+            manager.remove(device_id);
+            // Clear the temporary disconnection flag
+            let _ = crate::commands::clear_temporary_disconnection(device_id);
+        } else {
+            return Ok(existing_handle.clone());
+        }
     }
     
     // Get list of connected devices
     let devices = keepkey_rust::features::list_connected_devices();
     
-    // Find device by exact ID match
+    // Find device by multiple strategies:
+    // 1. Exact ID match
+    // 2. Canonical ID match (for aliases)
+    // 3. Check if any device might be the same physical device
     let device = devices.iter()
         .find(|d| d.unique_id == device_id)
+        .or_else(|| {
+            // Check if this device might be aliased (for bootloader mode transitions)
+            let canonical_id = crate::commands::get_canonical_device_id(device_id);
+            if canonical_id != device_id {
+                devices.iter().find(|d| d.unique_id == canonical_id)
+            } else {
+                None
+            }
+        })
+        .or_else(|| {
+            // Check if any connected device might be the same physical device
+            devices.iter().find(|d| {
+                crate::commands::are_devices_potentially_same(&d.unique_id, device_id)
+            })
+        })
         .ok_or_else(|| format!("Device {} not found in connected devices", device_id))?;
     
     // Create a new queue handle
-    println!("🚀 Creating new device worker for device: {}", device_id);
+    log::info!("🚀 Creating new device worker for device: {}", device_id);
     let handle = DeviceQueueFactory::spawn_worker(device_id.to_string(), device.clone());
     
     // Insert the queue under the device ID

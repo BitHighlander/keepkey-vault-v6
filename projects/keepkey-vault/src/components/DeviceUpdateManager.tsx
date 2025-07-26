@@ -25,6 +25,9 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
   const [isProcessing, setIsProcessing] = useState(false)
   const [hasCompletedOnce, setHasCompletedOnce] = useState(false)
   
+  // Track temporary disconnections
+  const [temporarilyDisconnected, setTemporarilyDisconnected] = useState(false)
+  
   // Track processed events to prevent loops
   const [processedEvents, setProcessedEvents] = useState<Set<string>>(new Set())
   const [lastProcessedStatus, setLastProcessedStatus] = useState<string | null>(null)
@@ -104,11 +107,25 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
       return
     }
     
-    // Handle firmware update
+    // Handle firmware update - check bootloader mode first
     if (status.needsFirmwareUpdate) {
       console.log('🔧 DeviceUpdateManager: Device needs firmware update')
-      setShowFirmwareUpdate(true)
-      return
+      
+      // Check if device is in bootloader mode (required for firmware updates)
+      const isInBootloaderMode = status.features?.bootloaderMode === true
+      console.log('🔧 DeviceUpdateManager: Device in bootloader mode:', isInBootloaderMode)
+      
+      if (!isInBootloaderMode) {
+        // Device needs to enter bootloader mode first
+        console.log('🔧 DeviceUpdateManager: Device not in bootloader mode, showing instructions')
+        setShowEnterBootloaderMode(true)
+        return
+      } else {
+        // Device is in bootloader mode, proceed with firmware update
+        console.log('🔧 DeviceUpdateManager: Device in bootloader mode, showing firmware update')
+        setShowFirmwareUpdate(true)
+        return
+      }
     }
     
     // Handle PIN unlock
@@ -239,7 +256,7 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
         setConnectedDeviceId(null)
       })
 
-      // Listen for device invalid state (timeout) errors
+            // Listen for device invalid state (timeout) errors
       const invalidStateUnsubscribe = listen<{
         deviceId: string
         error: string
@@ -252,54 +269,49 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
         const isTransient = event.payload.error.includes('Device operation timed out') ||
                           event.payload.error.includes('temporarily unavailable') ||
                           event.payload.error.includes('Device not found') ||
-                          event.payload.error.includes('Communication Timeout')
+                          event.payload.error.includes('Communication Timeout') ||
+                          event.payload.error.includes('No such device')
         
         if (isTransient) {
           console.log('📋 Treating as transient error - applying grace period')
-          // setTemporarilyDisconnected(true) // This state was removed, so this line is removed
-          
-          // Clear any existing timeout
-          // if (disconnectionTimeout) { // This state was removed, so this line is removed
-          //   clearTimeout(disconnectionTimeout)
-          // }
+          setTemporarilyDisconnected(true)
           
           // Set a timeout to show dialog if not reconnected within grace period
-          // const timeout = setTimeout(() => { // This state was removed, so this line is removed
-          //   if (temporarilyDisconnected) { // This state was removed, so this line is removed
-          //     console.log('⏰ Grace period expired - showing invalid state dialog') // This state was removed, so this line is removed
-          //     showInvalidStateDialog(event.payload) // This state was removed, so this line is removed
-          //   } // This state was removed, so this line is removed
-          // }, 10000) // 10 second grace period // This state was removed, so this line is removed
+          setTimeout(() => {
+            if (temporarilyDisconnected) {
+              console.log('⏰ Grace period expired - showing invalid state dialog')
+              showInvalidStateDialog(event.payload)
+            }
+          }, 10000) // 10 second grace period
           
-          // setDisconnectionTimeout(timeout) // This state was removed, so this line is removed
           return
         }
         
         // Non-transient error - show dialog immediately
-        // showInvalidStateDialog(event.payload) // This state was removed, so this line is removed
+        showInvalidStateDialog(event.payload)
       })
       
-      // const showInvalidStateDialog = (payload: any) => { // This state was removed, so this line is removed
-      //   // CRITICAL: Clear ALL existing dialogs first // This state was removed, so this line is removed
-      //   setShowBootloaderUpdate(false) // This state was removed, so this line is removed
-      //   setShowFirmwareUpdate(false) // This state was removed, so this line is removed
-      //   setShowWalletCreation(false) // This state was removed, so this line is removed
-      //   setShowEnterBootloaderMode(false) // This state was removed, so this line is removed
-      //   setShowPinUnlock(false)  // This is crucial to prevent overlapping // This state was removed, so this line is removed
+      const showInvalidStateDialog = (payload: any) => {
+        // CRITICAL: Clear ALL existing dialogs first
+        setShowBootloaderUpdate(false)
+        setShowFirmwareUpdate(false)
+        setShowWalletCreation(false)
+        setShowEnterBootloaderMode(false)
+        setShowPinUnlock(false)  // This is crucial to prevent overlapping
         
-      //   // Clear device status to prevent any further state updates // This state was removed, so this line is removed
-      //   setDeviceStatus(null) // This state was removed, so this line is removed
+        // Clear device status to prevent any further state updates
+        setDeviceStatus(null)
         
-      //   // Show the simple invalid state dialog // This state was removed, so this line is removed
-      //   deviceInvalidStateDialog.show({ // This state was removed, so this line is removed
-      //     deviceId: payload.deviceId, // This state was removed, so this line is removed
-      //     error: payload.error, // This state was removed, so this line is removed
-      //     onDialogClose: () => { // This state was removed, so this line is removed
-      //       console.log('Invalid state dialog closed - user should reconnect device') // This state was removed, so this line is removed
-      //       // Device status will be updated when device reconnects // This state was removed, so this line is removed
-      //     } // This state was removed, so this line is removed
-      //   }) // This state was removed, so this line is removed
-      // } // This state was removed, so this line is removed
+        // Show the simple invalid state dialog
+        deviceInvalidStateDialog.show({
+          deviceId: payload.deviceId,
+          error: payload.error,
+          onDialogClose: () => {
+            console.log('Invalid state dialog closed - user should reconnect device')
+            // Device status will be updated when device reconnects
+          }
+        })
+             }
 
       // Listen for PIN unlock needed events
       const pinUnlockUnsubscribe = listen<{
@@ -355,22 +367,21 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
       }>('device:reconnected', (event) => {
         console.log('🔄 Device reconnected:', event.payload)
         
-        // if (event.payload.wasTemporary) { // This state was removed, so this line is removed
-        //   console.log('✅ Temporary disconnection resolved') // This state was removed, so this line is removed
-        //   setTemporarilyDisconnected(false) // This state was removed, so this line is removed
+        if (event.payload.wasTemporary) {
+          setTemporarilyDisconnected(false)
+          console.log('✅ Temporary disconnection resolved')
           
-        //   // Clear the grace period timeout // This state was removed, so this line is removed
-        //   if (disconnectionTimeout) { // This state was removed, so this line is removed
-        //     clearTimeout(disconnectionTimeout) // This state was removed, so this line is removed
-        //     setDisconnectionTimeout(null) // This state was removed, so this line is removed
-        //   } // This state was removed, so this line is removed
+          // If invalid state dialog is showing for this device, hide it
+          if (deviceInvalidStateDialog.isShowing(event.payload.deviceId)) {
+            console.log('🔄 Hiding invalid state dialog due to reconnection')
+            deviceInvalidStateDialog.hide(event.payload.deviceId)
+          }
           
-        //   // If invalid state dialog is showing for this device, hide it // This state was removed, so this line is removed
-        //   if (deviceInvalidStateDialog.isShowing(event.payload.deviceId)) { // This state was removed, so this line is removed
-        //     console.log('🔄 Hiding invalid state dialog due to reconnection') // This state was removed, so this line is removed
-        //     deviceInvalidStateDialog.hide(event.payload.deviceId) // This state was removed, so this line is removed
-        //   } // This state was removed, so this line is removed
-        // } // This state was removed, so this line is removed
+          // Try to get fresh device status after reconnection
+          setTimeout(() => {
+            tryGetDeviceStatus(event.payload.deviceId)
+          }, 2000) // Give device time to settle
+        }
       })
 
       // Listen for device disconnection
@@ -385,7 +396,31 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
           return; // Don't change state during recovery
         }
         
-        // Clear all state when device disconnects (only if not in recovery)
+        // Check if device is in firmware update mode - if so, treat as temporary disconnection
+        const isFirmwareUpdate = showFirmwareUpdate || showBootloaderUpdate || showEnterBootloaderMode
+        if (isFirmwareUpdate) {
+          console.log('🔄 DeviceUpdateManager: Device disconnected during firmware update - treating as temporary')
+          setTemporarilyDisconnected(true)
+          
+          // Set a grace period before clearing state
+          setTimeout(() => {
+            if (temporarilyDisconnected) {
+              console.log('⏰ Firmware update grace period expired - clearing state')
+              setDeviceStatus(null)
+              setConnectedDeviceId(null)
+              setShowBootloaderUpdate(false)
+              setShowFirmwareUpdate(false)
+              setShowWalletCreation(false)
+              setShowEnterBootloaderMode(false)
+              setShowPinUnlock(false)
+              if (timeoutId) clearTimeout(timeoutId)
+            }
+          }, 15000) // 15 second grace period for firmware updates
+          
+          return; // Don't clear state immediately
+        }
+        
+        // Normal disconnection - clear all state immediately
         setDeviceStatus(null)
         setConnectedDeviceId(null)
         setShowBootloaderUpdate(false)
@@ -517,10 +552,12 @@ export const DeviceUpdateManager: React.FC<DeviceUpdateManagerProps> = ({ onComp
 
   return (
     <>
-      {showEnterBootloaderMode && deviceStatus.bootloaderCheck && deviceStatus.deviceId && (
+      {showEnterBootloaderMode && deviceStatus.deviceId && (
         <EnterBootloaderModeDialog
           isOpen={showEnterBootloaderMode}
+          updateType={deviceStatus.needsBootloaderUpdate ? 'bootloader' : 'firmware'}
           bootloaderCheck={deviceStatus.bootloaderCheck}
+          firmwareCheck={deviceStatus.firmwareCheck}
           onClose={handleEnterBootloaderModeClose}
         />
       )}
