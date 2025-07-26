@@ -109,7 +109,7 @@ jobs:
     - name: Rust cache
       uses: swatinem/rust-cache@v2
       with:
-        workspaces: './src-tauri -> target'
+        workspaces: './projects/keepkey-vault/src-tauri -> target'
         cache-on-failure: true
 
     - name: Install Bun
@@ -118,6 +118,7 @@ jobs:
         bun-version: latest
 
     - name: Install frontend dependencies
+      working-directory: ./projects/keepkey-vault
       shell: bash
       run: |
         echo "📁 Current directory: $(pwd)"
@@ -131,6 +132,10 @@ jobs:
         echo "📁 Current directory: $(pwd)"
         echo "📁 Contents of current directory:"
         ls -la ./
+        echo "📁 Contents of projects directory:"
+        ls -la ./projects/
+        echo "📁 Contents of keepkey-vault directory:"
+        ls -la ./projects/keepkey-vault/
         echo "📁 Looking for device-protocol:"
         find . -name "device-protocol" -type d 2>/dev/null || echo "Not found"
         echo "📁 Looking for types.proto:"
@@ -152,7 +157,7 @@ jobs:
         MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
         MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       with:
-        projectPath: .
+        projectPath: ./projects/keepkey-vault
         tagName: v__VERSION__ # the action automatically replaces __VERSION__ with the app version
         releaseName: 'KeepKey Vault v__VERSION__'
         args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
@@ -182,7 +187,7 @@ jobs:
       with:
         name: ${{ matrix.platform }}-artifacts
         path: |
-          src-tauri/target/release/bundle/
+          projects/keepkey-vault/src-tauri/target/release/bundle/
         retention-days: 7
 
     - name: Upload build logs
@@ -191,5 +196,5 @@ jobs:
       with:
         name: ${{ matrix.platform }}-build-logs
         path: |
-          src-tauri/target/release/build/
+          projects/keepkey-vault/src-tauri/target/release/build/
         retention-days: 3 

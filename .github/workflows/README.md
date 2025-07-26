@@ -45,12 +45,13 @@ For code signing and notarization, configure these repository secrets:
 ### Manual Build
 ```bash
 # From the repository root
+cd projects/keepkey-vault
 bun install
 bun tauri build
 ```
 
 ### Creating a Release
-1. Update version in `src-tauri/tauri.conf.json`
+1. Update version in `projects/keepkey-vault/src-tauri/tauri.conf.json`
 2. Commit and push changes
 3. Create and push a version tag:
    ```bash

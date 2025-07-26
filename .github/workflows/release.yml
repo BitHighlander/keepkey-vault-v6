@@ -98,6 +98,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
 
       - name: Install app dependencies
+        working-directory: ./projects/keepkey-vault
         run: bun install
 
       - name: Build Tauri app
@@ -117,7 +118,7 @@ jobs:
           MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         with:
-          projectPath: .
+          projectPath: ./projects/keepkey-vault
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
 
