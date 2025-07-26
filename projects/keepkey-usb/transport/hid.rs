@@ -227,17 +227,41 @@ impl Transport for HidTransport {
         
         // Prepare first packet with v4 format (EXACT MATCH TO WORKING VAULT V1)
         let mut first_packet = vec![0u8; HID_REPORT_SIZE];
-        first_packet[0] = REPORT_ID;  // 0x00 - REQUIRED BY VAULT V1!
-        first_packet[1] = 0x3f;
-        first_packet[2] = 0x23;
-        first_packet[3] = 0x23;
-        first_packet[4..6].copy_from_slice(msg_type);
-        first_packet[6..10].copy_from_slice(msg_length);
+        
+        // Windows HID fix: Different packet format for Windows vs other platforms
+        #[cfg(target_os = "windows")]
+        {
+            // Windows: Start directly with protocol without report ID
+            first_packet[0] = 0x3f;
+            first_packet[1] = 0x23;
+            first_packet[2] = 0x23;
+            first_packet[3..5].copy_from_slice(msg_type);
+            first_packet[5..9].copy_from_slice(msg_length);
+            
+            info!("🪟 Windows HID: Using direct protocol format (no report ID)");
+        }
+        
+        // Non-Windows: Use original format with report ID
+        #[cfg(not(target_os = "windows"))]
+        {
+            first_packet[0] = REPORT_ID;  // 0x00 - Required for other platforms
+            first_packet[1] = 0x3f;
+            first_packet[2] = 0x23;
+            first_packet[3] = 0x23;
+            first_packet[4..6].copy_from_slice(msg_type);
+            first_packet[6..10].copy_from_slice(msg_length);
+        }
         
         // Copy as much data as fits in first packet
-        let first_chunk_size = (HID_REPORT_SIZE - 10).min(msg_data.len());
+        #[cfg(target_os = "windows")]
+        let first_chunk_size = (HID_REPORT_SIZE - 9).min(msg_data.len()); // 9 bytes header on Windows
+        #[cfg(not(target_os = "windows"))]
+        let first_chunk_size = (HID_REPORT_SIZE - 10).min(msg_data.len()); // 10 bytes header on other platforms
         if first_chunk_size > 0 {
-            first_packet[10..10 + first_chunk_size].copy_from_slice(&msg_data[..first_chunk_size]);
+            #[cfg(target_os = "windows")]
+            first_packet[9..9 + first_chunk_size].copy_from_slice(&msg_data[..first_chunk_size]); // Windows: start at offset 9
+            #[cfg(not(target_os = "windows"))]
+            first_packet[10..10 + first_chunk_size].copy_from_slice(&msg_data[..first_chunk_size]); // Other platforms: start at offset 10
         }
         
         debug!("HID Write: Sending first packet (64 bytes), data chunk size: {}", first_chunk_size);
