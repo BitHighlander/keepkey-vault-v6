@@ -54,6 +54,30 @@ pub fn is_device_in_recovery_flow(device_id: &str) -> bool {
     }
 }
 
+/// Get all devices currently in recovery flow
+pub fn get_all_recovery_flow_devices() -> Result<Vec<String>, String> {
+    let flows = RECOVERY_DEVICE_FLOWS.lock().map_err(|_| "Failed to lock recovery device flows".to_string())?;
+    Ok(flows.iter().cloned().collect())
+}
+
+/// Clear all recovery flows (used during USB reset)
+pub fn clear_all_recovery_flows() {
+    if let Ok(mut flows) = RECOVERY_DEVICE_FLOWS.lock() {
+        let count = flows.len();
+        flows.clear();
+        log::info!("🧹 Cleared {} recovery flows", count);
+    }
+}
+
+/// Clear all device aliases (used during USB reset)
+pub fn clear_all_device_aliases() {
+    if let Ok(mut aliases) = RECOVERY_DEVICE_ALIASES.lock() {
+        let count = aliases.len();
+        aliases.clear();
+        log::info!("🧹 Cleared {} device aliases", count);
+    }
+}
+
 /// Remove device from recovery flow state
 pub fn unmark_device_in_recovery_flow(device_id: &str) -> Result<(), String> {
     let mut flows = RECOVERY_DEVICE_FLOWS.lock().map_err(|_| "Failed to lock recovery device flows".to_string())?;

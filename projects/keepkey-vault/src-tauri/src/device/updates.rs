@@ -369,10 +369,9 @@ pub async fn update_device_firmware(
                 eprintln!("Failed to log firmware update success response: {}", e);
             }
             
-            // Clear recovery flow marking on success
-            if let Err(e) = crate::commands::unmark_device_in_recovery_flow(&device_id) {
-                log::error!("Failed to unmark device from recovery flow: {}", e);
-            }
+            // Don't immediately clear recovery flow marking on success - device will reboot
+            // The recovery flow will be cleared when device reconnects and is detected as stable
+            log::info!("🔄 Device {} firmware update successful. Keeping in recovery flow until stable reconnection.", device_id);
             
             Ok(success)
         }

@@ -84,6 +84,7 @@ pub fn run() {
             commands::device::get_device_status::get_device_status,
             commands::device::check_device_bootloader::check_device_bootloader,
             commands::device::get_devices_needing_setup::get_devices_needing_setup,
+            commands::device::reset_usb_subsystem,
             // Update commands  
             device::updates::update_device_bootloader,
             device::updates::update_device_firmware,
@@ -172,6 +173,112 @@ async fn start_usb_monitoring(
                         
                         // Clear temporary disconnection flag using unique_id for consistency
                         let _ = commands::clear_temporary_disconnection(&device.unique_id);
+                        
+                        // Check if ANY device in recovery flow might match this reconnected device
+                        let mut found_recovery_device = false;
+                        let mut recovery_device_id = String::new();
+                        
+                        // Check direct match first
+                        if commands::is_device_in_recovery_flow(&device.unique_id) {
+                            found_recovery_device = true;
+                            recovery_device_id = device.unique_id.clone();
+                        } else {
+                            // Check if this device might be the same as any device in recovery flow
+                            // This handles cases where device ID changes after firmware update
+                            if let Ok(recovery_flows) = commands::get_all_recovery_flow_devices() {
+                                for recovery_id in recovery_flows {
+                                    if commands::are_devices_potentially_same(&device.unique_id, &recovery_id) {
+                                        log::info!("🔗 Device {} appears to be {} returning from recovery flow", device.unique_id, recovery_id);
+                                        found_recovery_device = true;
+                                        // Set up alias for the new ID
+                                        let _ = commands::add_recovery_device_alias(&device.unique_id, &recovery_id);
+                                        recovery_device_id = recovery_id;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // If device was in recovery flow and has now reconnected, wait for it to be fully ready
+                        // This ensures the device is stable after firmware update reboot
+                        if found_recovery_device {
+                            log::info!("🛡️ Device {} reconnected after recovery flow (original: {}). Waiting for device to be fully ready...", 
+                                device.unique_id, recovery_device_id);
+                            let device_id_for_cleanup = recovery_device_id;
+                            let current_device_id = device.unique_id.clone();
+                            let app_handle_clone = app_handle.clone();
+                            let queue_manager_clone = device_queue_manager.clone();
+                            
+                            tokio::spawn(async move {
+                                // Try to get device features for up to 30 seconds
+                                let mut attempts = 0;
+                                let max_attempts = 30;
+                                let mut device_ready = false;
+                                
+                                while attempts < max_attempts && !device_ready {
+                                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                                    attempts += 1;
+                                    
+                                    // Try to get device features to confirm it's ready
+                                    // Use the current device ID for communication, not the recovery ID
+                                    match commands::device::get_or_create_device_queue(
+                                        &current_device_id,
+                                        &queue_manager_clone
+                                    ).await {
+                                        Ok(queue_handle) => {
+                                            if let Ok(features) = queue_handle.get_features().await {
+                                                let converted_features = commands::device::get_features::convert_features_to_device_features(features);
+                                                log::info!("✅ Device {} is ready after {} seconds (firmware: {})", 
+                                                    current_device_id, attempts, converted_features.version);
+                                                device_ready = true;
+                                                
+                                                // Emit device ready event with the original device ID for UI consistency
+                                                let _ = commands::emit_or_queue_event(
+                                                    &app_handle_clone,
+                                                    "device:ready-after-update",
+                                                    serde_json::json!({
+                                                        "deviceId": device_id_for_cleanup.clone(),
+                                                        "firmwareVersion": converted_features.version
+                                                    })
+                                                ).await;
+                                            }
+                                        }
+                                        Err(_) => {
+                                            // Device not ready yet, log periodically
+                                            if attempts % 5 == 0 {
+                                                log::info!("⏳ Still waiting for device {} to be ready... ({}/{})", 
+                                                    current_device_id, attempts, max_attempts);
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                if device_ready {
+                                    // Clear recovery flow only after device is truly ready
+                                    if let Err(e) = commands::unmark_device_in_recovery_flow(&device_id_for_cleanup) {
+                                        log::error!("Failed to unmark device from recovery flow after reconnection: {}", e);
+                                    } else {
+                                        log::info!("✅ Device {} recovery flow cleared after successful initialization", device_id_for_cleanup);
+                                    }
+                                } else {
+                                    log::error!("❌ Device {} failed to become ready after {} seconds", device_id_for_cleanup, max_attempts);
+                                    
+                                    // Emit event suggesting USB reset
+                                    let _ = commands::emit_or_queue_event(
+                                        &app_handle_clone,
+                                        "device:recovery-failed",
+                                        serde_json::json!({
+                                            "deviceId": device_id_for_cleanup.clone(),
+                                            "reason": "Device failed to initialize after firmware update",
+                                            "suggestAction": "reset_usb"
+                                        })
+                                    ).await;
+                                    
+                                    // Still clear recovery flow to avoid stuck state
+                                    let _ = commands::unmark_device_in_recovery_flow(&device_id_for_cleanup);
+                                }
+                            });
+                        }
                         
                         // Emit reconnection event
                         let _ = commands::emit_or_queue_event(
@@ -285,13 +392,19 @@ async fn start_usb_monitoring(
                         let _ = commands::mark_device_temporarily_disconnected(&info.device.unique_id);
                         
                         // Clear any existing device queue to force recreation on reconnection
+                        // This is necessary because USB transports become invalid after disconnection
                         if let Some(state) = app_handle.try_state::<commands::DeviceQueueManager>() {
                             let queue_manager_arc = state.inner().clone();
-                            let device_id = info.device.unique_id.clone(); // Extract the ID to avoid borrowing issues
+                            let device_id = info.device.unique_id.clone();
+                            let in_recovery = commands::is_device_in_recovery_flow(&info.device.unique_id);
                             tokio::spawn(async move {
                                 let mut manager = queue_manager_arc.lock().await;
                                 if manager.remove(&device_id).is_some() {
-                                    log::info!("🗑️ Removed stale device queue for disconnected device: {}", device_id);
+                                    if in_recovery {
+                                        log::info!("🗑️ Removed device queue for firmware update reboot: {}", device_id);
+                                    } else {
+                                        log::info!("🗑️ Removed stale device queue for disconnected device: {}", device_id);
+                                    }
                                 }
                             });
                         }

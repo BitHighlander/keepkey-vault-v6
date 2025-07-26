@@ -13,9 +13,10 @@ import {
   Heading,
   List,
   ListItem,
-  Icon
+  Icon,
+  IconButton
 } from '@chakra-ui/react';
-import { FaDownload, FaCheckCircle, FaExclamationTriangle } from "react-icons/fa";
+import { FaDownload, FaCheckCircle, FaExclamationTriangle, FaSync } from "react-icons/fa";
 import { EnterBootloaderModeDialog } from '../../EnterBootloaderModeDialog';
 
 interface StepProps {
@@ -46,6 +47,7 @@ export function Step3VerifyFirmware({ onNext, onSkip, deviceId }: StepProps) {
   const [updateComplete, setUpdateComplete] = useState(false);
   const [showBootloaderInstructions, setShowBootloaderInstructions] = useState(false);
   const [waitingForBootloaderMode, setWaitingForBootloaderMode] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     checkFirmware();
@@ -61,9 +63,11 @@ export function Step3VerifyFirmware({ onNext, onSkip, deviceId }: StepProps) {
       
       // Cleanup event listeners
       if ((window as any).step3Listeners) {
-        const { connectUnsubscribe, featuresUnsubscribe } = (window as any).step3Listeners;
+        const { connectUnsubscribe, featuresUnsubscribe, readyUnsubscribe, recoveryFailedUnsubscribe } = (window as any).step3Listeners;
         if (connectUnsubscribe) connectUnsubscribe();
         if (featuresUnsubscribe) featuresUnsubscribe();
+        if (readyUnsubscribe) readyUnsubscribe();
+        if (recoveryFailedUnsubscribe) recoveryFailedUnsubscribe();
         delete (window as any).step3Listeners;
       }
     };
@@ -100,10 +104,47 @@ export function Step3VerifyFirmware({ onNext, onSkip, deviceId }: StepProps) {
       }
     });
 
+    // Listen for device ready after update events
+    const readyUnsubscribe = await listen('device:ready-after-update', (event: any) => {
+      console.log('🚀 [Step3] Device ready after update:', event.payload);
+      if (event.payload.deviceId === deviceId) {
+        console.log('✅ [Step3] Device firmware update complete and device is ready');
+        // Refresh firmware status now that device is ready
+        checkFirmware();
+      }
+    });
+
+    // Listen for recovery failure events
+    const recoveryFailedUnsubscribe = await listen('device:recovery-failed', async (event: any) => {
+      console.log('❌ [Step3] Device recovery failed:', event.payload);
+      if (event.payload.deviceId === deviceId && event.payload.suggestAction === 'reset_usb') {
+        console.log('🔄 [Step3] Attempting USB reset to recover device...');
+        setError('Device recovery failed. Resetting USB system...');
+        setLoading(true);
+        
+        try {
+          await invoke('reset_usb_subsystem');
+          console.log('✅ [Step3] USB reset triggered successfully');
+          setError(null);
+          
+          // Wait a bit then try to check firmware again
+          setTimeout(() => {
+            checkFirmware();
+          }, 5000);
+        } catch (error) {
+          console.error('❌ [Step3] Failed to reset USB:', error);
+          setError('Failed to reset USB. Please unplug and replug your device.');
+          setLoading(false);
+        }
+      }
+    });
+
     // Store unsubscribe functions for cleanup
     (window as any).step3Listeners = {
       connectUnsubscribe,
-      featuresUnsubscribe
+      featuresUnsubscribe,
+      readyUnsubscribe,
+      recoveryFailedUnsubscribe
     };
   };
 
@@ -195,6 +236,54 @@ export function Step3VerifyFirmware({ onNext, onSkip, deviceId }: StepProps) {
     }
   };
 
+  const handleRefresh = async () => {
+    if (!deviceId || refreshing) return;
+    
+    try {
+      setRefreshing(true);
+      setError(null);
+      console.log('🔄 [Step3] Manual refresh initiated');
+      
+      // First try to get fresh device features
+      try {
+        const features = await invoke('get_features', { deviceId });
+        console.log('✅ [Step3] Fresh device features retrieved:', features);
+      } catch (featureError) {
+        console.warn('⚠️ [Step3] Could not get fresh features (device may be in bootloader mode):', featureError);
+      }
+      
+      // Then refresh the full device status
+      await checkFirmware();
+      
+    } catch (error) {
+      console.error('Failed to refresh device status:', error);
+      setError(error?.toString() || 'Failed to refresh device status');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleUSBReset = async () => {
+    console.log('🔧 [Step3] Manual USB reset requested');
+    setError('Resetting USB system...');
+    setLoading(true);
+    
+    try {
+      await invoke('reset_usb_subsystem');
+      console.log('✅ [Step3] USB reset completed');
+      setError(null);
+      
+      // Wait for USB to stabilize then check firmware
+      setTimeout(() => {
+        checkFirmware();
+      }, 5000);
+    } catch (error) {
+      console.error('❌ [Step3] USB reset failed:', error);
+      setError('USB reset failed. Please try unplugging and replugging your device.');
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <Box width="full" maxWidth="2xl">
@@ -204,6 +293,17 @@ export function Step3VerifyFirmware({ onNext, onSkip, deviceId }: StepProps) {
             <Heading fontSize="xl" fontWeight="bold" color="white">
               Verify Firmware
             </Heading>
+            <IconButton
+              aria-label="Refresh device status"
+              onClick={handleRefresh}
+              loading={refreshing}
+              variant="ghost"
+              colorScheme="blue"
+              size="sm"
+              ml={2}
+            >
+              <Icon as={FaSync} />
+            </IconButton>
           </HStack>
           
           <VStack gap={6} mt={6}>
@@ -229,6 +329,9 @@ export function Step3VerifyFirmware({ onNext, onSkip, deviceId }: StepProps) {
                 <HStack gap={4}>
                   <Button onClick={checkFirmware} colorScheme="red" variant="outline">
                     Retry
+                  </Button>
+                  <Button onClick={handleUSBReset} colorScheme="orange" variant="outline">
+                    Reset USB
                   </Button>
                   <Button onClick={handleSkip} variant="outline">
                     Skip This Step

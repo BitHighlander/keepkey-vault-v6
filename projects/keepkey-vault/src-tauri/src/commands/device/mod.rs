@@ -19,6 +19,49 @@ pub use get_device_status::get_device_status;
 pub use check_device_bootloader::check_device_bootloader;
 pub use get_devices_needing_setup::get_devices_needing_setup;
 
+/// Force reset the entire USB subsystem by clearing all device queues and re-enumerating
+#[tauri::command]
+pub async fn reset_usb_subsystem(
+    device_queue_manager: tauri::State<'_, crate::commands::DeviceQueueManager>,
+    window: tauri::Window,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    
+    log::warn!("🔄 Nuclear USB reset requested - clearing all device queues and re-enumerating");
+    
+    // Step 1: Clear all device queues
+    {
+        let queue_manager_arc = device_queue_manager.inner().clone();
+        let mut manager = queue_manager_arc.lock().await;
+        let device_ids: Vec<String> = manager.keys().cloned().collect();
+        
+        log::info!("🗑️ Clearing {} device queues", device_ids.len());
+        manager.clear();
+    }
+    
+    // Step 2: Clear all recovery flows and aliases
+    crate::commands::clear_all_recovery_flows();
+    crate::commands::clear_all_device_aliases();
+    
+    // Step 3: Emit reset event
+    let _ = window.emit("usb:reset", serde_json::json!({
+        "timestamp": chrono::Utc::now().timestamp()
+    }));
+    
+    log::info!("✅ USB subsystem reset complete");
+    
+    // Step 4: Wait a bit for USB to stabilize
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    
+    // Step 5: Trigger device re-enumeration by getting connected devices
+    // This will cause the device monitoring loop to re-detect all devices
+    let _ = crate::commands::device::get_connected_devices::get_connected_devices().await;
+    
+    log::info!("🔍 Device re-enumeration triggered");
+    
+    Ok(())
+}
+
 // TODO: Add re-exports for other device commands as they are implemented
 // pub use wipe_device::wipe_device;
 // pub use set_device_label::set_device_label;

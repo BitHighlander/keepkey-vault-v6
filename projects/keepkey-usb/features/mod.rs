@@ -182,12 +182,18 @@ pub fn get_device_features_for_device(target_device: &FriendlyUsbDevice) -> Resu
             false
         })
     } else {
+        // Handle both formats: "busN_addrM" and "keepkey_XXXX_XXXX_busN_addrM"
         let parts: Vec<&str> = target_device.unique_id.split('_').collect();
-        if parts.len() >= 2 {
-            let bus_str = parts[0].strip_prefix("bus").unwrap_or("");
-            let addr_str = parts[1].strip_prefix("addr").unwrap_or("");
+        
+        // Find the parts that start with "bus" and "addr"
+        let bus_part = parts.iter().find(|p| p.starts_with("bus"));
+        let addr_part = parts.iter().find(|p| p.starts_with("addr"));
+        
+        if let (Some(bus_str), Some(addr_str)) = (bus_part, addr_part) {
+            let bus_num = bus_str.strip_prefix("bus").unwrap_or("");
+            let addr_num = addr_str.strip_prefix("addr").unwrap_or("");
             
-            if let (Ok(bus), Ok(addr)) = (bus_str.parse::<u8>(), addr_str.parse::<u8>()) {
+            if let (Ok(bus), Ok(addr)) = (bus_num.parse::<u8>(), addr_num.parse::<u8>()) {
                 devices.iter().find(|d| d.bus_number() == bus && d.address() == addr)
             } else {
                 None
