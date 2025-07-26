@@ -3,7 +3,7 @@
 use tauri::State;
 use keepkey_rust::features::DeviceFeatures;
 use crate::commands::DeviceQueueManager;
-use super::{get_or_create_device_queue, DEV_MODE, DEV_FORCE_DEVICE_ID};
+use super::get_or_create_device_queue;
 
 /// Get features for a specific device with proper bootloader mode communication
 #[tauri::command]
@@ -46,18 +46,10 @@ async fn try_oob_bootloader_detection(device_id: &str) -> Result<DeviceFeatures,
     // Get list of connected devices to find the physical device
     let devices = keepkey_rust::features::list_connected_devices();
     
-    // Find the actual physical device (handling DEV_MODE device ID mapping)
-    let target_device = if DEV_MODE && device_id == DEV_FORCE_DEVICE_ID {
-        // In dev mode, map the hardcoded device ID to any connected KeepKey
-        devices.iter()
-            .find(|d| d.is_keepkey)
-            .ok_or_else(|| format!("No physical KeepKey device found for development deviceId {}", device_id))?
-    } else {
-        // Normal mode: find device by exact ID match
-        devices.iter()
-            .find(|d| d.unique_id == device_id)
-            .ok_or_else(|| format!("Device {} not found in connected devices", device_id))?
-    };
+    // Find device by exact ID match
+    let target_device = devices.iter()
+        .find(|d| d.unique_id == device_id)
+        .ok_or_else(|| format!("Device {} not found in connected devices", device_id))?;
     
     // Use the proper OOB bootloader detection method
     let result = tokio::task::spawn_blocking({

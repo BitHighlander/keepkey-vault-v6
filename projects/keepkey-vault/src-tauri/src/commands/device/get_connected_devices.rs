@@ -2,10 +2,6 @@
 
 use serde::{Serialize, Deserialize};
 
-// Development mode: Force all devices to use this specific deviceId
-const DEV_FORCE_DEVICE_ID: &str = "932313031174732313008100";
-const DEV_MODE: bool = true; // Set to false for production
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectedDevice {
     pub device_id: String,
@@ -27,15 +23,8 @@ pub async fn get_connected_devices() -> Result<Vec<ConnectedDevice>, String> {
         .into_iter()
         .filter(|device| device.is_keepkey)
         .map(|device| {
-            let device_id = if DEV_MODE {
-                println!("🛠️ DEV MODE: Mapping device {} to {}", device.unique_id, DEV_FORCE_DEVICE_ID);
-                DEV_FORCE_DEVICE_ID.to_string()
-            } else {
-                device.unique_id
-            };
-            
             ConnectedDevice {
-                device_id,
+                device_id: device.unique_id,
                 name: device.name,
                 manufacturer: device.manufacturer,
                 vid: device.vid,
