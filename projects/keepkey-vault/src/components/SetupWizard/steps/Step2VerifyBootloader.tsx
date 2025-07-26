@@ -349,38 +349,64 @@ export function Step2VerifyBootloader({ onNext, deviceId }: StepProps) {
         return (
           <VStack gap={6} align="stretch">
             <Box p={6} bg="blue.900" borderRadius="md" borderWidth="1px" borderColor="blue.500">
-              <Text fontSize="lg" fontWeight="bold" color="blue.200" mb={4}>
+              <Text fontSize="lg" fontWeight="bold" color="blue.200" mb={6} textAlign="center">
                 📋 Put Your Device in Bootloader Mode
               </Text>
               
-              <VStack gap={4} align="stretch">
-                <Box p={4} bg="gray.800" borderRadius="md" textAlign="center">
-                  <Text color="gray.400" fontSize="sm" mb={2}>Bootloader Mode Instructions</Text>
-                  <Box h="240px" bg="gray.700" borderRadius="md" display="flex" alignItems="center" justifyContent="center" overflow="hidden">
-                    <Image 
-                      src={bootloaderGif} 
-                      alt="KeepKey bootloader mode instructions"
-                      maxH="220px"
-                      maxW="100%"
-                      objectFit="contain"
-                      borderRadius="md"
-                    />
+              <HStack gap={6} align="flex-start">
+                {/* GIF Section */}
+                <Box flex="1" maxW="400px">
+                  <Box p={4} bg="gray.800" borderRadius="md" textAlign="center">
+                    <Text color="gray.400" fontSize="sm" mb={2}>Bootloader Mode Instructions</Text>
+                    <Box h="280px" bg="gray.700" borderRadius="md" display="flex" alignItems="center" justifyContent="center" overflow="hidden">
+                      <Image 
+                        src={bootloaderGif} 
+                        alt="KeepKey bootloader mode instructions"
+                        maxH="260px"
+                        maxW="100%"
+                        objectFit="contain"
+                        borderRadius="md"
+                      />
+                    </Box>
                   </Box>
                 </Box>
 
-                <VStack gap={2} fontSize="sm" color="blue.100" align="stretch">
-                  <Text fontWeight="bold">Follow these simple steps:</Text>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>1. UNPLUG your KeepKey from the USB cable</Text></HStack>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>2. HOLD DOWN the single button on your device</Text></HStack>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>3. While continuing to hold the button, PLUG the USB cable back in</Text></HStack>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>4. Keep holding until the screen shows "BOOTLOADER MODE"</Text></HStack>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>5. Release the button</Text></HStack>
-                </VStack>
+                {/* Instructions Section */}
+                <Box flex="1" minW="300px">
+                  <VStack gap={4} align="stretch">
+                    <Text fontWeight="bold" color="blue.100" fontSize="md" mb={2}>
+                      Follow these simple steps:
+                    </Text>
+                    
+                    <VStack gap={3} fontSize="sm" color="blue.100" align="stretch">
+                      <HStack>
+                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
+                        <Text><strong>1.</strong> UNPLUG your KeepKey from the USB cable</Text>
+                      </HStack>
+                      <HStack>
+                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
+                        <Text><strong>2.</strong> HOLD DOWN the single button on your device</Text>
+                      </HStack>
+                      <HStack>
+                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
+                        <Text><strong>3.</strong> While continuing to hold the button, PLUG the USB cable back in</Text>
+                      </HStack>
+                      <HStack>
+                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
+                        <Text><strong>4.</strong> Keep holding until the screen shows "BOOTLOADER MODE"</Text>
+                      </HStack>
+                      <HStack>
+                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
+                        <Text><strong>5.</strong> Release the button</Text>
+                      </HStack>
+                    </VStack>
 
-                <Button colorScheme="blue" onClick={startWaitingForDisconnect} size="lg">
-                  ✅ I'm Ready - Start Monitoring
-                </Button>
-              </VStack>
+                    <Button colorScheme="blue" onClick={startWaitingForDisconnect} size="lg" mt={4}>
+                      ✅ I'm Ready - Start Monitoring
+                    </Button>
+                  </VStack>
+                </Box>
+              </HStack>
             </Box>
           </VStack>
         );
@@ -551,10 +577,6 @@ export function Step2VerifyBootloader({ onNext, deviceId }: StepProps) {
         <Card.Footer>
           <HStack justify="space-between" width="100%">
             <HStack>
-              <Button variant="outline" onClick={() => window.history.back()}>
-                Back
-              </Button>
-              
               {/* Debug button */}
               <Button 
                 variant="outline" 
