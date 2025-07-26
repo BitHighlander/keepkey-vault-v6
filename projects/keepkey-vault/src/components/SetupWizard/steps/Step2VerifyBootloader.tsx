@@ -15,6 +15,7 @@ import { FaShieldAlt, FaCheckCircle, FaExclamationTriangle, FaUsb, FaSync, FaArr
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import bootloaderGif from "../../../assets/gif/kk.gif";
 
 interface StepProps {
   onNext: (data?: any) => void;
@@ -308,36 +309,36 @@ export function Step2VerifyBootloader({ onNext, deviceId }: StepProps) {
       case 'needs_update':
         return (
           <VStack gap={6} align="stretch">
-            <Box p={6} bg="red.900" borderRadius="md" borderWidth="1px" borderColor="red.500">
+            <Box p={6} bg="blue.900" borderRadius="md" borderWidth="1px" borderColor="blue.500">
               <HStack justify="space-between" mb={4}>
                 <HStack>
-                  <Icon as={FaExclamationTriangle} boxSize={6} color="red.400" />
-                  <Text fontSize="lg" fontWeight="bold" color="red.200">
-                    🚨 CRITICAL SECURITY UPDATE REQUIRED
+                  <Icon as={FaCheckCircle} boxSize={6} color="blue.400" />
+                  <Text fontSize="lg" fontWeight="bold" color="blue.200">
+                    🔧 Device Setup Required
                   </Text>
                 </HStack>
-                <Badge colorScheme="red" size="lg">OUTDATED</Badge>
+                <Badge colorScheme="blue" size="lg">SETUP</Badge>
               </HStack>
 
               <VStack gap={3} align="stretch">
                 <Box>
                   <Text fontSize="sm" color="gray.400" mb={1}>Current Bootloader Version:</Text>
-                  <Code colorScheme="red" fontSize="sm">
-                    v{features?.bootloaderVersion} (VULNERABLE)
+                  <Code colorScheme="gray" fontSize="sm">
+                    v{features?.bootloaderVersion}
                   </Code>
                 </Box>
                 <Box>
-                  <Text fontSize="sm" color="gray.400" mb={1}>Required Version:</Text>
-                  <Code colorScheme="green" fontSize="sm">v{LATEST_BOOTLOADER_VERSION}</Code>
+                  <Text fontSize="sm" color="gray.400" mb={1}>Target Version:</Text>
+                  <Code colorScheme="blue" fontSize="sm">v{LATEST_BOOTLOADER_VERSION}</Code>
                 </Box>
                 
-                <Text color="red.300" fontSize="sm">
-                  Your device has an outdated bootloader that contains security vulnerabilities. 
-                  You must update to continue using your KeepKey safely.
+                <Text color="blue.300" fontSize="sm">
+                  Welcome! To complete your KeepKey setup, we'll update your device to the latest firmware. 
+                  This ensures you have access to all the newest features and optimal performance.
                 </Text>
 
-                <Button colorScheme="red" onClick={startBootloaderUpdate} size="lg" mt={2}>
-                  🛡️ Start Security Update
+                <Button colorScheme="blue" onClick={startBootloaderUpdate} size="lg" mt={2}>
+                  ⚡ Continue Setup
                 </Button>
               </VStack>
             </Box>
@@ -353,21 +354,27 @@ export function Step2VerifyBootloader({ onNext, deviceId }: StepProps) {
               </Text>
               
               <VStack gap={4} align="stretch">
-                {/* TODO: Add actual GIF/animation here */}
                 <Box p={4} bg="gray.800" borderRadius="md" textAlign="center">
                   <Text color="gray.400" fontSize="sm" mb={2}>Bootloader Mode Instructions</Text>
-                  <Box h="200px" bg="gray.700" borderRadius="md" display="flex" alignItems="center" justifyContent="center">
-                    <Text color="gray.500">[GIF: Device bootloader mode steps]</Text>
+                  <Box h="240px" bg="gray.700" borderRadius="md" display="flex" alignItems="center" justifyContent="center" overflow="hidden">
+                    <Image 
+                      src={bootloaderGif} 
+                      alt="KeepKey bootloader mode instructions"
+                      maxH="220px"
+                      maxW="100%"
+                      objectFit="contain"
+                      borderRadius="md"
+                    />
                   </Box>
                 </Box>
 
                 <VStack gap={2} fontSize="sm" color="blue.100" align="stretch">
-                  <Text fontWeight="bold">Follow these steps exactly:</Text>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>1. Hold BOTH buttons on your KeepKey</Text></HStack>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>2. While holding buttons, UNPLUG the USB cable</Text></HStack>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>3. While holding buttons, PLUG the USB cable back in</Text></HStack>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>4. Continue holding for 3 seconds until screen shows "BOOTLOADER"</Text></HStack>
-                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>5. Release buttons</Text></HStack>
+                  <Text fontWeight="bold">Follow these simple steps:</Text>
+                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>1. UNPLUG your KeepKey from the USB cable</Text></HStack>
+                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>2. HOLD DOWN the single button on your device</Text></HStack>
+                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>3. While continuing to hold the button, PLUG the USB cable back in</Text></HStack>
+                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>4. Keep holding until the screen shows "BOOTLOADER MODE"</Text></HStack>
+                  <HStack><Icon as={FaArrowDown} color="blue.400" /><Text>5. Release the button</Text></HStack>
                 </VStack>
 
                 <Button colorScheme="blue" onClick={startWaitingForDisconnect} size="lg">
