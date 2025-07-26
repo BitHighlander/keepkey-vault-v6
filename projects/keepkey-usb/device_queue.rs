@@ -332,27 +332,7 @@ impl DeviceWorker {
         // For OOB bootloaders, we need to handle raw responses directly since
         // the standard handler throws an error on Failure messages
         let transport = self.ensure_transport().await?;
-        let response = match transport.handle(GetFeatures {}.into()) {
-            Ok(resp) => resp,
-            Err(e) => {
-                let error_str = e.to_string();
-                if error_str.contains("timeout") || 
-                   error_str.contains("device disconnected") ||
-                   error_str.contains("Entity not found") ||
-                   error_str.contains("No data received") ||
-                   error_str.contains("Communication") {
-                    // Transport error - drop it and retry once
-                    warn!("🔄 Transport error in GetFeatures, recreating transport: {}", e);
-                    self.transport = None;
-                    
-                    // Get a fresh transport and retry
-                    let transport = self.ensure_transport().await?;
-                    transport.handle(GetFeatures {}.into())?
-                } else {
-                    return Err(e.into());
-                }
-            }
-        };
+        let response = transport.handle(GetFeatures {}.into())?;
 
         match response {
             Message::Features(features) => {

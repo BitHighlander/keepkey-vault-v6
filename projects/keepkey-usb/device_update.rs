@@ -23,7 +23,7 @@ pub enum VersionComparison {
 pub fn check_bootloader_status(features: &DeviceFeatures) -> BootloaderCheck {
     let current_version = features.bootloader_version.clone().unwrap_or_else(|| "0.0.0".to_string());
     let latest_version = "2.1.4".to_string(); // Minimum required version
-    let bootloader_mode = features.bootloader_mode.unwrap_or(false);
+    let bootloader_mode = features.bootloader_mode; // It's already a bool
     
     let comparison = compare_versions(&current_version, &latest_version);
     let needs_update = comparison == VersionComparison::Less;

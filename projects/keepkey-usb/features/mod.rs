@@ -62,6 +62,7 @@ pub fn list_devices() -> Box<[Device<GlobalContext>]> {
 /// Structure representing device features returned by the KeepKey
 /// This is a simplified version that includes the most commonly used fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeviceFeatures {
     /// Device label or name
     pub label: Option<String>,

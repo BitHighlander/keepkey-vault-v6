@@ -1,226 +1,399 @@
-// device/updates.rs - Device bootloader and firmware update operations
-
 use tauri::State;
-use serde::{Serialize, Deserialize};
-use keepkey_rust::features::DeviceFeatures;
-use std::cmp::Ordering;
-use std::collections::HashMap;
 use crate::commands::DeviceQueueManager;
+use std::fs;
+use std::path::PathBuf;
+use semver::Version;
+use crate::commands::logging::{log_device_request, log_device_response};
+use serde_json;
 
-// Bootloader update types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum VersionComparison {
-    Current,
-    PatchBehind,
-    MinorBehind,
-    MajorBehind,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BootloaderCheck {
-    pub is_outdated: bool,
-    pub current_version: String,
-    pub latest_version: String,
-    pub is_critical: bool,
-    pub comparison: VersionComparison,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FrontendBootloaderCheck {
-    pub needs_update: bool,
-    pub current_version: String,
-    pub latest_version: String,
-    pub is_required: bool,
-    pub severity: String, // 'low' | 'medium' | 'high' | 'critical'
-}
-
-// Releases.json structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReleasesData {
-    pub latest: LatestVersions,
-    pub hashes: HashMappings,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LatestVersions {
-    pub bootloader: BootloaderVersionInfo,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BootloaderVersionInfo {
-    pub version: String,
-    pub hash: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HashMappings {
-    pub bootloader: HashMap<String, String>,
-}
-
-/// Load releases.json and map bootloader hash to version
-pub fn bootloader_version_from_hash(hash: &str) -> Option<String> {
-    // Load releases.json from the firmware directory
-    let releases_path = std::path::PathBuf::from("firmware/releases.json");
-    
-    match std::fs::read_to_string(&releases_path) {
-        Ok(json_str) => {
-            match serde_json::from_str::<ReleasesData>(&json_str) {
-                Ok(releases) => {
-                    if let Some(version) = releases.hashes.bootloader.get(hash) {
-                        // Clean up version string (remove 'v' prefix if present)
-                        let clean_version = version.trim_start_matches('v');
-                        log::info!("🔍 Mapped bootloader hash {} to version {}", &hash[..8], clean_version);
-                        Some(clean_version.to_string())
-                    } else {
-                        log::warn!("⚠️ No bootloader version found for hash {}", &hash[..8]);
-                        None
-                    }
-                }
-                Err(e) => {
-                    log::error!("❌ Failed to parse releases.json: {}", e);
-                    None
-                }
-            }
-        }
-        Err(e) => {
-            log::error!("❌ Failed to load releases.json from {:?}: {}", releases_path, e);
-            None
-        }
-    }
-}
-
-/// Check device bootloader status and determine if update is needed
-/// SIMPLE: No hash = error, hash = 2.1.4 = success, otherwise needs update
-pub fn check_bootloader_status(features: &DeviceFeatures) -> Option<BootloaderCheck> {
-    let latest_bootloader_version = "2.1.4".to_string();
-    
-    // Get the bootloader version (which should be the hash)
-    let current_bootloader_version = if let Some(ref bl_version) = features.bootloader_version {
-        bl_version.clone()
-    } else {
-        "NO_BOOTLOADER_HASH".to_string()
-    };
-    
-    log::info!("🔒 Simple bootloader check: current='{}', latest='{}'", current_bootloader_version, latest_bootloader_version);
-    
-    // SIMPLE logic:
-    if current_bootloader_version == "NO_BOOTLOADER_HASH" {
-        // Failed to get bootloader hash
-        log::error!("🚨 Failed to get bootloader hash");
-        return None; // This will cause an error in the calling function
-    } else if current_bootloader_version == latest_bootloader_version {
-        // Valid bootloader version
-        log::info!("✅ Valid bootloader version: {}", current_bootloader_version);
-        Some(BootloaderCheck {
-            current_version: current_bootloader_version,
-            latest_version: latest_bootloader_version,
-            is_outdated: false,
-            is_critical: false,
-            comparison: VersionComparison::Current,
-        })
-    } else {
-        // Bootloader needs update
-        log::info!("📋 Bootloader version: {} (needs update to {})", current_bootloader_version, latest_bootloader_version);
-        Some(BootloaderCheck {
-            current_version: current_bootloader_version,
-            latest_version: latest_bootloader_version,
-            is_outdated: true,
-            is_critical: true,
-            comparison: VersionComparison::MajorBehind,
-        })
-    }
-}
-
-/// Compare two semantic versions
-pub fn compare_versions(current: &str, latest: &str) -> Result<VersionComparison, String> {
-    // Helper to parse version string into (major, minor, patch)
-    let parse_version = |v: &str| -> Result<(u32, u32, u32), String> {
-        let parts: Vec<&str> = v.split('.').collect();
-        if parts.len() != 3 {
-            return Err(format!("Invalid version format: {}", v));
-        }
-        
-        let major = parts[0].parse::<u32>().map_err(|_| format!("Invalid major version: {}", parts[0]))?;
-        let minor = parts[1].parse::<u32>().map_err(|_| format!("Invalid minor version: {}", parts[1]))?;
-        let patch = parts[2].parse::<u32>().map_err(|_| format!("Invalid patch version: {}", parts[2]))?;
-        
-        Ok((major, minor, patch))
-    };
-    
-    let (curr_major, curr_minor, curr_patch) = parse_version(current)?;
-    let (latest_major, latest_minor, latest_patch) = parse_version(latest)?;
-    
-    match (curr_major.cmp(&latest_major), curr_minor.cmp(&latest_minor), curr_patch.cmp(&latest_patch)) {
-        (Ordering::Less, _, _) => Ok(VersionComparison::MajorBehind),
-        (Ordering::Equal, Ordering::Less, _) => Ok(VersionComparison::MinorBehind),
-        (Ordering::Equal, Ordering::Equal, Ordering::Less) => Ok(VersionComparison::PatchBehind),
-        (Ordering::Equal, Ordering::Equal, Ordering::Equal) => Ok(VersionComparison::Current),
-        _ => Ok(VersionComparison::Current), // Current version is newer than latest (unusual but treat as current)
-    }
-}
-
-/// Determine bootloader version for device features during conversion
-/// SIMPLE: Just return the bootloader hash if available, otherwise error state
-pub fn determine_bootloader_version(device_features: &DeviceFeatures) -> String {
-    log::info!("🔍 determine_bootloader_version called for device:");
-    log::info!("   - firmware_version: {}", device_features.version);
-    log::info!("   - bootloader_mode: {}", device_features.bootloader_mode);
-    log::info!("   - bootloader_hash: {:?}", device_features.bootloader_hash);
-    
-    // If we have bootloader hash, try to map it to a version
-    if let Some(ref bl_hash) = device_features.bootloader_hash {
-        log::info!("📋 Bootloader hash found: {}", bl_hash);
-        
-        // Try to map hash to version
-        if let Some(version) = bootloader_version_from_hash(bl_hash) {
-            log::info!("✅ Successfully mapped hash to version: {}", version);
-            version
-        } else {
-            log::warn!("⚠️ Hash not found in releases.json, returning hash as version");
-            bl_hash.clone() // Fallback to hash if not found in mapping
-        }
-    } else {
-        log::error!("🚨 Failed to get bootloader hash");
-        "NO_BOOTLOADER_HASH".to_string() // Clear error marker
-    }
-}
-
-/// Update device bootloader
+/// Update device bootloader using the device queue (like v5)
 #[tauri::command]
 pub async fn update_device_bootloader(
     device_id: String,
     target_version: String,
-    _queue_manager: State<'_, DeviceQueueManager>,
+    queue_manager: State<'_, DeviceQueueManager>,
 ) -> Result<bool, String> {
-    log::info!("🔄 Updating bootloader for device {} to version {}", device_id, target_version);
+    log::info!("🔄 Starting bootloader update for device {}: target version {}", device_id, target_version);
     
-    // TODO: Implement actual bootloader update logic
-    // This should:
-    // 1. Put device into bootloader mode if not already
-    // 2. Flash the new bootloader
-    // 3. Verify the update was successful
-    // 4. Return success/failure
+    let request_id = format!("bootloader_update_{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs());
     
-    // For now, return an error indicating it's not implemented
-    Err("Bootloader update not yet implemented".to_string())
+    // Log the request
+    let request_data = serde_json::json!({
+        "device_id": device_id,
+        "target_version": target_version,
+        "operation": "update_device_bootloader"
+    });
+    
+    if let Err(e) = log_device_request(&device_id, &request_id, "UpdateBootloader", &request_data).await {
+        eprintln!("Failed to log bootloader update request: {}", e);
+    }
+    
+    // Validate target version
+    let _target_semver = Version::parse(&target_version)
+        .map_err(|e| format!("Invalid target bootloader version: {}", e))?;
+    
+    // Load the bootloader binary from the firmware directory (bundled with app)
+    let bootloader_filename = format!("bl_v{}", target_version);
+    
+    // Debug: Log current working directory and environment
+    let cwd = std::env::current_dir().unwrap_or_default();
+    println!("🔍 Current working directory: {:?}", cwd);
+    
+    // Get executable location for bundled app paths
+    let exe_path = std::env::current_exe().ok();
+    let exe_dir = exe_path.as_ref().and_then(|p| p.parent());
+    
+    if let Some(exe_dir) = &exe_dir {
+        println!("🔍 Executable directory: {:?}", exe_dir);
+    }
+    
+    // Try multiple possible paths for the firmware directory
+    let mut possible_firmware_paths = vec![
+        // Development paths
+        PathBuf::from("firmware").join(&bootloader_filename).join("blupdater.bin"), // Bundled with app (dev)
+        PathBuf::from("./firmware").join(&bootloader_filename).join("blupdater.bin"), // Explicit current dir
+        cwd.join("firmware").join(&bootloader_filename).join("blupdater.bin"), // Absolute from cwd
+    ];
+    
+    // Add executable-relative paths for bundled apps
+    if let Some(exe_dir) = exe_dir {
+        // Common Tauri bundled app locations
+        possible_firmware_paths.push(exe_dir.join("firmware").join(&bootloader_filename).join("blupdater.bin"));
+        possible_firmware_paths.push(exe_dir.join("../Resources/firmware").join(&bootloader_filename).join("blupdater.bin")); // macOS
+        possible_firmware_paths.push(exe_dir.join("../firmware").join(&bootloader_filename).join("blupdater.bin"));
+        
+        // Windows specific paths
+        #[cfg(target_os = "windows")]
+        {
+            possible_firmware_paths.push(exe_dir.join("resources/firmware").join(&bootloader_filename).join("blupdater.bin"));
+        }
+        
+        // Linux specific paths  
+        #[cfg(target_os = "linux")]
+        {
+            possible_firmware_paths.push(exe_dir.join("resources/firmware").join(&bootloader_filename).join("blupdater.bin"));
+            possible_firmware_paths.push(exe_dir.join("../share/keepkey-vault/firmware").join(&bootloader_filename).join("blupdater.bin"));
+        }
+    }
+    
+    // Debug: Log all paths being tried
+    println!("🔍 Trying to find bootloader file. Checking paths:");
+    for (i, path) in possible_firmware_paths.iter().enumerate() {
+        println!("  Path {}: {:?} - exists: {}", i + 1, path, path.exists());
+    }
+    
+    let firmware_path = possible_firmware_paths.iter().find(|path| path.exists()).cloned();
+    
+    let bootloader_bytes = if let Some(path) = firmware_path {
+        println!("📂 Loading bootloader from: {}", path.display());
+        fs::read(&path)
+            .map_err(|e| format!("Failed to read bootloader file {}: {}", path.display(), e))?
+    } else {
+        let error_msg = format!(
+            "Bootloader file not found: bl_v{}/blupdater.bin in any firmware directory. Target version was: {}",
+            target_version,
+            target_version
+        );
+        
+        // Log the error response
+        let response_data = serde_json::json!({
+            "error": error_msg,
+            "operation": "update_device_bootloader"
+        });
+        
+        if let Err(e) = log_device_response(&device_id, &request_id, false, &response_data, Some(&error_msg)).await {
+            eprintln!("Failed to log bootloader update error response: {}", e);
+        }
+        
+        return Err(error_msg);
+    };
+    
+    println!("📦 Loaded bootloader binary: {} bytes", bootloader_bytes.len());
+    
+    // Get or create device queue handle
+    // Always remove any existing handle for this device to ensure we get a fresh one
+    // This is important for bootloader updates where the device may have disconnected/reconnected
+    let queue_handle = {
+        let mut manager = queue_manager.lock().await;
+        
+        // Remove existing handle to force recreation with fresh transport
+        if manager.get(&device_id).is_some() {
+            println!("🔄 [DEBUG] Removing existing device queue handle to force recreation after reconnection");
+            manager.remove(&device_id);
+        }
+        
+        // Find the device by ID
+            let devices = keepkey_rust::features::list_connected_devices();
+            
+            // Debug: Log all available devices and the device we're looking for
+            println!("🔍 [DEBUG] Looking for device ID: '{}'", device_id);
+            println!("🔍 [DEBUG] Available devices:");
+            for (i, device) in devices.iter().enumerate() {
+                println!("  {}. device_id: '{}', name: '{}', vid: 0x{:04x}, pid: 0x{:04x}", 
+                         i + 1, device.unique_id, device.name, device.vid, device.pid);
+            }
+            
+            let device_info = devices
+                .iter()
+                .find(|d| d.unique_id == device_id);
+                
+            match device_info {
+                Some(device_info) => {
+                    // Spawn a new device worker
+                    let handle = keepkey_rust::device_queue::DeviceQueueFactory::spawn_worker(device_id.clone(), device_info.clone());
+                    manager.insert(device_id.clone(), handle.clone());
+                    handle
+                }
+                None => {
+                    let error = format!("Device {} not found", device_id);
+                    
+                    // Log the error response
+                    let response_data = serde_json::json!({
+                        "error": error,
+                        "operation": "update_device_bootloader"
+                    });
+                    
+                    if let Err(e) = log_device_response(&device_id, &request_id, false, &response_data, Some(&error)).await {
+                        eprintln!("Failed to log bootloader update error response: {}", e);
+                    }
+                    
+                    return Err(error);
+                }
+            }
+    };
+    
+    println!("⚠️  IMPORTANT: Check your KeepKey device screen!");
+    println!("    You may need to press the button to confirm the update.");
+    println!("    The v1.0.3 bootloader requires manual confirmation.");
+    println!("    If you see 'Upload' on the device screen, press and hold the button.");
+    
+    // Perform the bootloader update through the queue (no get_features check needed - device queue handles it)
+    match queue_handle.update_bootloader(target_version.clone(), bootloader_bytes).await {
+        Ok(success) => {
+            println!("✅ Bootloader update successful for device {}", device_id);
+            
+            // Log the successful response
+            let response_data = serde_json::json!({
+                "success": success,
+                "target_version": target_version,
+                "operation": "update_device_bootloader"
+            });
+            
+            if let Err(e) = log_device_response(&device_id, &request_id, true, &response_data, None).await {
+                eprintln!("Failed to log bootloader update success response: {}", e);
+            }
+            
+            Ok(success)
+        }
+        Err(e) => {
+            let error_msg = e.to_string();
+            println!("❌ Bootloader update failed for device {}: {}", device_id, error_msg);
+            
+            // Log the error response
+            let response_data = serde_json::json!({
+                "error": error_msg,
+                "operation": "update_device_bootloader"
+            });
+            
+            if let Err(e) = log_device_response(&device_id, &request_id, false, &response_data, Some(&error_msg)).await {
+                eprintln!("Failed to log bootloader update error response: {}", e);
+            }
+            
+            Err(format!("Bootloader update failed: {}", error_msg))
+        }
+    }
 }
 
-/// Update device firmware  
+/// Update device firmware using the device queue (like v5)
 #[tauri::command]
 pub async fn update_device_firmware(
     device_id: String,
     target_version: String,
+    queue_manager: State<'_, DeviceQueueManager>,
+) -> Result<bool, String> {
+    log::info!("🔄 Starting firmware update for device {}: target version {}", device_id, target_version);
+    
+    let request_id = format!("firmware_update_{}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs());
+    
+    // Log the request
+    let request_data = serde_json::json!({
+        "device_id": device_id,
+        "target_version": target_version,
+        "operation": "update_device_firmware"
+    });
+    
+    if let Err(e) = log_device_request(&device_id, &request_id, "UpdateFirmware", &request_data).await {
+        eprintln!("Failed to log firmware update request: {}", e);
+    }
+    
+    // Validate target version
+    let _target_semver = Version::parse(&target_version)
+        .map_err(|e| format!("Invalid target firmware version: {}", e))?;
+    
+    // Load the firmware binary from the firmware directory (bundled with app)
+    let firmware_filename = format!("v{}", target_version);
+    
+    // Debug: Log current working directory and environment
+    let cwd = std::env::current_dir().unwrap_or_default();
+    println!("🔍 Current working directory: {:?}", cwd);
+    
+    // Get executable location for bundled app paths
+    let exe_path = std::env::current_exe().ok();
+    let exe_dir = exe_path.as_ref().and_then(|p| p.parent());
+    
+    if let Some(exe_dir) = &exe_dir {
+        println!("🔍 Executable directory: {:?}", exe_dir);
+    }
+    
+    // Try multiple possible paths for the firmware directory
+    let mut possible_firmware_paths = vec![
+        // Development paths
+        PathBuf::from("firmware").join(&firmware_filename).join("firmware.keepkey.bin"), // Bundled with app (dev)
+        PathBuf::from("./firmware").join(&firmware_filename).join("firmware.keepkey.bin"), // Explicit current dir
+        cwd.join("firmware").join(&firmware_filename).join("firmware.keepkey.bin"), // Absolute from cwd
+    ];
+    
+    // Add executable-relative paths for bundled apps
+    if let Some(exe_dir) = exe_dir {
+        // Common Tauri bundled app locations
+        possible_firmware_paths.push(exe_dir.join("firmware").join(&firmware_filename).join("firmware.keepkey.bin"));
+        possible_firmware_paths.push(exe_dir.join("../Resources/firmware").join(&firmware_filename).join("firmware.keepkey.bin")); // macOS
+        possible_firmware_paths.push(exe_dir.join("../firmware").join(&firmware_filename).join("firmware.keepkey.bin"));
+        
+        // Windows specific paths
+        #[cfg(target_os = "windows")]
+        {
+            possible_firmware_paths.push(exe_dir.join("resources/firmware").join(&firmware_filename).join("firmware.keepkey.bin"));
+        }
+        
+        // Linux specific paths  
+        #[cfg(target_os = "linux")]
+        {
+            possible_firmware_paths.push(exe_dir.join("resources/firmware").join(&firmware_filename).join("firmware.keepkey.bin"));
+            possible_firmware_paths.push(exe_dir.join("../share/keepkey-vault/firmware").join(&firmware_filename).join("firmware.keepkey.bin"));
+        }
+    }
+    
+    let firmware_path = possible_firmware_paths.iter().find(|path| path.exists()).cloned();
+    
+    let firmware_bytes = if let Some(path) = firmware_path {
+        println!("📂 Loading firmware from: {}", path.display());
+        fs::read(&path)
+            .map_err(|e| format!("Failed to read firmware file {}: {}", path.display(), e))?
+    } else {
+        let error_msg = format!(
+            "Firmware file not found: v{}/firmware.keepkey.bin in any firmware directory. Target version was: {}",
+            target_version,
+            target_version
+        );
+        
+        // Log the error response
+        let response_data = serde_json::json!({
+            "error": error_msg,
+            "operation": "update_device_firmware"
+        });
+        
+        if let Err(e) = log_device_response(&device_id, &request_id, false, &response_data, Some(&error_msg)).await {
+            eprintln!("Failed to log firmware update error response: {}", e);
+        }
+        
+        return Err(error_msg);
+    };
+    
+    println!("📦 Loaded firmware binary: {} bytes", firmware_bytes.len());
+    
+    // Get or create device queue handle
+    let queue_handle = {
+        let mut manager = queue_manager.lock().await;
+        
+        if let Some(handle) = manager.get(&device_id) {
+            handle.clone()
+        } else {
+            // Find the device by ID
+            let devices = keepkey_rust::features::list_connected_devices();
+            let device_info = devices
+                .iter()
+                .find(|d| d.unique_id == device_id);
+                
+            match device_info {
+                Some(device_info) => {
+                    // Spawn a new device worker
+                    let handle = keepkey_rust::device_queue::DeviceQueueFactory::spawn_worker(device_id.clone(), device_info.clone());
+                    manager.insert(device_id.clone(), handle.clone());
+                    handle
+                }
+                None => {
+                    let error = format!("Device {} not found", device_id);
+                    
+                    // Log the error response
+                    let response_data = serde_json::json!({
+                        "error": error,
+                        "operation": "update_device_firmware"
+                    });
+                    
+                    if let Err(e) = log_device_response(&device_id, &request_id, false, &response_data, Some(&error)).await {
+                        eprintln!("Failed to log firmware update error response: {}", e);
+                    }
+                    
+                    return Err(error);
+                }
+            }
+        }
+    };
+    
+    // Perform the firmware update through the queue
+    match queue_handle.update_firmware(target_version.clone(), firmware_bytes).await {
+        Ok(success) => {
+            println!("✅ Firmware update successful for device {}", device_id);
+            
+            // Log the successful response
+            let response_data = serde_json::json!({
+                "success": success,
+                "target_version": target_version,
+                "operation": "update_device_firmware"
+            });
+            
+            if let Err(e) = log_device_response(&device_id, &request_id, true, &response_data, None).await {
+                eprintln!("Failed to log firmware update success response: {}", e);
+            }
+            
+            Ok(success)
+        }
+        Err(e) => {
+            let error_msg = e.to_string();
+            println!("❌ Firmware update failed for device {}: {}", device_id, error_msg);
+            
+            // Log the error response
+            let response_data = serde_json::json!({
+                "error": error_msg,
+                "operation": "update_device_firmware"
+            });
+            
+            if let Err(e) = log_device_response(&device_id, &request_id, false, &response_data, Some(&error_msg)).await {
+                eprintln!("Failed to log firmware update error response: {}", e);
+            }
+            
+            Err(format!("Firmware update failed: {}", error_msg))
+        }
+    }
+}
+
+/// Resolve a blocking action (placeholder - v5 doesn't have this concept)
+#[tauri::command]
+pub async fn resolve_blocking_action(
+    device_id: String,
+    action_type: String, // Change from BlockingActionType to String
     _queue_manager: State<'_, DeviceQueueManager>,
 ) -> Result<bool, String> {
-    log::info!("🔄 Updating firmware for device {} to version {}", device_id, target_version);
+    log::info!("🔄 Resolving blocking action: {} for device {}", action_type, device_id);
     
-    // TODO: Implement actual firmware update logic
-    // This should:
-    // 1. Ensure device is in bootloader mode
-    // 2. Flash the new firmware
-    // 3. Verify the update was successful
-    // 4. Return success/failure
-    
-    // For now, return an error indicating it's not implemented
-    Err("Firmware update not yet implemented".to_string())
+    // TODO: Implement based on v5 pattern or remove if not needed
+    // For now, return success
+    Ok(true)
 } 

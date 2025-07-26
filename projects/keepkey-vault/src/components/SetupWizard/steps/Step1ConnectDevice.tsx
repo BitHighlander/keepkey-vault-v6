@@ -118,9 +118,7 @@ export function Step1ConnectDevice({ onNext, deviceId: preselectedDeviceId }: St
       <Card.Root bg="gray.900" borderColor="gray.700">
         <Card.Header bg="gray.850">
           <HStack justify="center" gap={3}>
-            <Icon asChild color="blue.500">
-              <FaUsb />
-            </Icon>
+            <Icon as={FaUsb} color="blue.500" />
             <Text fontSize="xl" fontWeight="bold" color="white">
               Connect Your KeepKey Device
             </Text>

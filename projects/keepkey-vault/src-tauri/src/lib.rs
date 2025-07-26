@@ -10,6 +10,7 @@ mod device;
 use std::sync::Arc;
 use tauri::{Manager};
 use keepkey_db::Database;
+use keepkey_rust;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -38,7 +39,7 @@ pub fn run() {
             
             app.manage(Arc::new(database));
             
-            // Initialize device queue manager
+            // Initialize device queue manager (like v5)
             let device_queue_manager = Arc::new(tokio::sync::Mutex::new(
                 std::collections::HashMap::<String, keepkey_rust::device_queue::DeviceQueueHandle>::new()
             ));
@@ -72,6 +73,7 @@ pub fn run() {
             // Device commands
             commands::device::get_features::get_features,
             commands::device::get_connected_devices::get_connected_devices,
+            commands::device::get_device_status::get_device_status,
             commands::device::check_device_bootloader::check_device_bootloader,
             commands::device::get_devices_needing_setup::get_devices_needing_setup,
             // Update commands  

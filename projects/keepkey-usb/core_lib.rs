@@ -6,3 +6,4 @@ pub mod transport;
 pub mod features;
 pub mod device_queue;
 pub mod chains;
+pub mod device_update;

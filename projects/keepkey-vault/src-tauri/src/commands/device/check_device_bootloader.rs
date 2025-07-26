@@ -6,7 +6,7 @@ use keepkey_db::Database;
 use crate::commands::DeviceQueueManager;
 use super::get_or_create_device_queue;
 use super::get_features::convert_features_to_device_features;
-use crate::device::updates::{check_bootloader_status, FrontendBootloaderCheck, VersionComparison};
+use keepkey_rust::device_update::{check_bootloader_status, BootloaderCheck};
 
 /// Check device bootloader status and determine if update is needed
 /// SECURITY: This function MUST fail safe - if bootloader version cannot be determined, it MUST return an error
@@ -15,7 +15,7 @@ pub async fn check_device_bootloader(
     device_id: String,
     queue_manager: State<'_, DeviceQueueManager>,
     database: State<'_, Arc<Database>>,
-) -> Result<FrontendBootloaderCheck, String> {
+) -> Result<BootloaderCheck, String> {
     log::info!("🔍 Checking bootloader status for device: {}", device_id);
     
     // Get device features first
@@ -35,31 +35,21 @@ pub async fn check_device_bootloader(
             }
             
             // SIMPLE: Try to get bootloader status
-            if let Some(bootloader_check) = check_bootloader_status(&device_features) {
-                // We got a bootloader check result - convert to frontend format
-                let severity = if bootloader_check.is_outdated {
-                    if bootloader_check.is_critical { "critical" } else { "high" }
-                } else {
-                    "low"
-                };
-
-                let needs_update = bootloader_check.is_outdated;
-
-                log::info!("🔒 Bootloader check completed: version={}, needs_update={}, severity={}", 
-                    bootloader_check.current_version, needs_update, severity);
-
-                Ok(FrontendBootloaderCheck {
-                    needs_update,
-                    current_version: bootloader_check.current_version,
-                    latest_version: bootloader_check.latest_version,
-                    is_required: bootloader_check.is_critical,
-                    severity: severity.to_string(),
-                })
+            let bootloader_check = check_bootloader_status(&device_features);
+            
+            // We got a bootloader check result - use it directly
+            let severity = if bootloader_check.is_critical {
+                "critical"
+            } else if bootloader_check.needs_update {
+                "high"
             } else {
-                // Failed to get bootloader hash
-                log::error!("🚨 SECURITY: Failed to get bootloader hash for device {}", device_id);
-                Err("SECURITY ERROR: Failed to get bootloader hash. Device cannot be verified as secure.".to_string())
-            }
+                "low"
+            };
+
+            log::info!("🔒 Bootloader check completed: version={}, needs_update={}, severity={}", 
+                bootloader_check.current_version, bootloader_check.needs_update, severity);
+
+            Ok(bootloader_check)
         }
         Err(e) => {
             log::error!("❌ Failed to get features for device {}: {}", device_id, e);

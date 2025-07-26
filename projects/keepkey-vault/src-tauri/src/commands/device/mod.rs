@@ -15,11 +15,11 @@ pub mod get_devices_needing_setup;
 // Re-export command functions
 pub use get_connected_devices::get_connected_devices;
 pub use get_features::get_features;
+pub use get_device_status::get_device_status;
 pub use check_device_bootloader::check_device_bootloader;
 pub use get_devices_needing_setup::get_devices_needing_setup;
 
 // TODO: Add re-exports for other device commands as they are implemented
-// pub use get_device_status::get_device_status;
 // pub use wipe_device::wipe_device;
 // pub use set_device_label::set_device_label;
 // pub use get_device_info_by_id::get_device_info_by_id;
