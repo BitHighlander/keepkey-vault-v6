@@ -109,7 +109,7 @@ jobs:
     - name: Rust cache
       uses: swatinem/rust-cache@v2
       with:
-        workspaces: './projects/keepkey-vault-v6/src-tauri -> target'
+        workspaces: './src-tauri -> target'
         cache-on-failure: true
 
     - name: Install Bun
@@ -118,7 +118,6 @@ jobs:
         bun-version: latest
 
     - name: Install frontend dependencies
-      working-directory: ./projects/keepkey-vault-v6
       shell: bash
       run: |
         echo "📁 Current directory: $(pwd)"
@@ -126,19 +125,16 @@ jobs:
         bun install
 
     - name: Debug build environment
-      working-directory: ./projects/keepkey-vault-v6
       shell: bash
       run: |
         echo "🔍 Debugging build environment..."
         echo "📁 Current directory: $(pwd)"
-        echo "📁 Parent directories:"
-        ls -la ../
-        ls -la ../../
-        ls -la ../../../
+        echo "📁 Contents of current directory:"
+        ls -la ./
         echo "📁 Looking for device-protocol:"
-        find ../../../ -name "device-protocol" -type d 2>/dev/null || echo "Not found"
+        find . -name "device-protocol" -type d 2>/dev/null || echo "Not found"
         echo "📁 Looking for types.proto:"
-        find ../../../ -name "types.proto" 2>/dev/null || echo "Not found"
+        find . -name "types.proto" 2>/dev/null || echo "Not found"
 
     - name: Build the app
       uses: tauri-apps/tauri-action@v0
@@ -156,7 +152,7 @@ jobs:
         MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
         MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       with:
-        projectPath: ./projects/keepkey-vault-v6
+        projectPath: .
         tagName: v__VERSION__ # the action automatically replaces __VERSION__ with the app version
         releaseName: 'KeepKey Vault v__VERSION__'
         args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
@@ -186,7 +182,7 @@ jobs:
       with:
         name: ${{ matrix.platform }}-artifacts
         path: |
-          projects/keepkey-vault-v6/src-tauri/target/release/bundle/
+          src-tauri/target/release/bundle/
         retention-days: 7
 
     - name: Upload build logs
@@ -195,5 +191,5 @@ jobs:
       with:
         name: ${{ matrix.platform }}-build-logs
         path: |
-          projects/keepkey-vault-v6/src-tauri/target/release/build/
+          src-tauri/target/release/build/
         retention-days: 3 
