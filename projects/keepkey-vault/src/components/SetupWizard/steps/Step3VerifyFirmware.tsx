@@ -212,41 +212,7 @@ export function Step3VerifyFirmware({ onNext, onSkip, deviceId }: StepProps) {
             </Text>
             
             {/* Show waiting message when bootloader instructions are displayed */}
-            {showBootloaderInstructions ? (
-              <VStack gap={4} p={6} bg="yellow.900" borderRadius="md" borderWidth="1px" borderColor="yellow.600">
-                <Icon as={FaExclamationTriangle} boxSize={12} color="yellow.400" />
-                <Text fontSize="lg" fontWeight="semibold" color="white">
-                  Waiting for Bootloader Mode
-                </Text>
-                <Text color="yellow.200" textAlign="center">
-                  Please follow the instructions in the dialog to put your device in bootloader mode.
-                </Text>
-                <Text fontSize="sm" color="gray.400" textAlign="center">
-                  The firmware update will continue automatically once your device is in bootloader mode.
-                </Text>
-                <HStack gap={4} mt={4}>
-                  <Button
-                    variant="outline"
-                    colorScheme="gray"
-                    onClick={() => {
-                      setShowBootloaderInstructions(false);
-                      setWaitingForBootloaderMode(false);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    colorScheme="yellow"
-                    onClick={() => {
-                      // Re-show instructions
-                      setShowBootloaderInstructions(true);
-                    }}
-                  >
-                    Show Instructions Again
-                  </Button>
-                </HStack>
-              </VStack>
-            ) : loading ? (
+            {showBootloaderInstructions ? null : loading ? (
               <VStack gap={4}>
                 <Spinner size="lg" color="blue.500" />
                 <Text color="gray.400">Checking firmware status...</Text>

@@ -44,7 +44,7 @@ export const EnterBootloaderModeDialog = ({
   return (
     <DialogRoot open={isOpen} onOpenChange={({ open }) => !open && onClose()}>
       <DialogContent 
-        maxW="sm" 
+        maxW="lg" 
         bg="gray.900" 
         color="white" 
         borderColor="yellow.500" 
@@ -62,34 +62,40 @@ export const EnterBootloaderModeDialog = ({
         </DialogHeader>
         
         <DialogBody py={4}>
-          <VStack align="stretch" gap={3}>
-            <Text fontSize="sm" color="gray.300" textAlign="center">
-              {updateDetails.description}
-            </Text>
-            
-            <Text fontSize="sm" color="gray.300" textAlign="center">
-              To update your {updateDetails.updateContext}, your device must be in <Text as="span" fontWeight="bold" color="yellow.300">Bootloader Mode</Text>
-            </Text>
-
-            <Box display="flex" justifyContent="center" py={4}>
+          <HStack align="start" gap={6}>
+            {/* Left side - Image */}
+            <Box flex="1" display="flex" justifyContent="center" alignItems="center">
               <img
-                  src={holdAndConnectSvg}
-                  alt="Hold button while connecting device"
-                  style={{ maxWidth: '240px', height: 'auto' }}
+                src={holdAndConnectSvg}
+                alt="Hold button while connecting device"
+                style={{ maxWidth: '200px', height: 'auto' }}
               />
             </Box>
-
-            <VStack align="stretch" gap={1} bg="gray.800" p={3} borderRadius="md" fontSize="sm">
-              <Text fontWeight="semibold" color="yellow.300">Quick Steps:</Text>
-              <Text>1. Unplug device</Text>
-              <Text>2. Hold button + plug in</Text>
-              <Text>3. Keep holding until "BOOTLOADER MODE" appears</Text>
-            </VStack>
             
-            <Text fontSize="xs" color="blue.300" textAlign="center">
-              Update dialog will appear automatically once in bootloader mode
-            </Text>
-          </VStack>
+            {/* Right side - Instructions */}
+            <VStack flex="1" align="stretch" gap={4}>
+              <VStack gap={2}>
+                <Text fontSize="sm" color="gray.300">
+                  {updateDetails.description}
+                </Text>
+                
+                <Text fontSize="sm" color="gray.300">
+                  To update your {updateDetails.updateContext}, your device must be in <Text as="span" fontWeight="bold" color="yellow.300">Bootloader Mode</Text>
+                </Text>
+              </VStack>
+
+              <VStack align="stretch" gap={1} bg="gray.800" p={3} borderRadius="md" fontSize="sm">
+                <Text fontWeight="semibold" color="yellow.300">Quick Steps:</Text>
+                <Text>1. Unplug device</Text>
+                <Text>2. Hold button + plug in</Text>
+                <Text>3. Keep holding until "BOOTLOADER MODE" appears</Text>
+              </VStack>
+              
+              <Text fontSize="xs" color="blue.300">
+                Update dialog will appear automatically once in bootloader mode
+              </Text>
+            </VStack>
+          </HStack>
         </DialogBody>
         
         <Box borderTopWidth="1px" borderColor="gray.700" pt={3}>
