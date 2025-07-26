@@ -3,6 +3,10 @@ use crate::commands::DeviceQueueManager;
 use super::get_or_create_device_queue;
 use tauri::State;
 
+// Development mode: Force all devices to use this specific deviceId
+const DEV_FORCE_DEVICE_ID: &str = "932313031174732313008100";
+const DEV_MODE: bool = true; // Set to false for production
+
 // DeviceStatus and related structs
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,12 +132,26 @@ pub async fn get_device_status(
     
     // Get connected devices to find the one we want
     let devices = keepkey_rust::features::list_connected_devices();
-    let device_info = devices
-        .iter()
-        .find(|d| d.unique_id == device_id);
     
-    if let Some(_device_info) = device_info {
-        // Get or create device queue handle
+    // In development mode, if requesting the hardcoded deviceId, map to physical device
+    let actual_device_to_check = if DEV_MODE && device_id == DEV_FORCE_DEVICE_ID {
+        log::info!("🛠️ DEV MODE: Mapping deviceId {} to physical device", DEV_FORCE_DEVICE_ID);
+        
+        // Find any connected KeepKey device to use as the physical device
+        devices.iter()
+            .find(|d| d.is_keepkey)
+            .cloned()
+    } else {
+        // Normal mode: find device by exact ID match
+        devices.iter()
+            .find(|d| d.unique_id == device_id)
+            .cloned()
+    };
+    
+    if let Some(device_info) = actual_device_to_check {
+        log::info!("🔍 Found device for status check: {}", device_info.unique_id);
+        
+        // Get or create device queue handle using the original device_id for mapping
         let queue_handle = get_or_create_device_queue(&device_id, &queue_manager).await?;
         
         // Fetch device features through the queue
