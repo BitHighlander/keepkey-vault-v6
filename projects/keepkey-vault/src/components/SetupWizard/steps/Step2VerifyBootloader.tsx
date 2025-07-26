@@ -11,8 +11,8 @@ import {
   Code,
   Image,
 } from "@chakra-ui/react";
-import { FaShieldAlt, FaCheckCircle, FaExclamationTriangle, FaUsb, FaSync, FaArrowDown } from "react-icons/fa";
-import { useState, useEffect } from "react";
+import { FaShieldAlt, FaCheckCircle, FaExclamationTriangle, FaUsb, FaSync, FaArrowDown, FaCheck } from "react-icons/fa";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import bootloaderGif from "../../../assets/gif/kk.gif";
@@ -25,83 +25,209 @@ interface StepProps {
   stepData?: any;
 }
 
-type UpdateFlowState = 
-  | 'checking'           // Initial check
-  | 'needs_update'       // Device needs bootloader update
-  | 'instructions'       // Showing bootloader mode instructions  
-  | 'wait_disconnect'    // Waiting for device to be unplugged
-  | 'disconnected'       // Device unplugged - good!
-  | 'wait_reconnect'     // Waiting for device to reconnect in bootloader mode
-  | 'bootloader_ready'   // Device reconnected in bootloader mode
-  | 'updating'           // Actually updating bootloader
-  | 'complete'           // Update complete
-  | 'error';             // Error occurred
+type FlowState = 'checking' | 'needs_update' | 'instructions' | 'wait_disconnect' | 'disconnected' | 'wait_reconnect' | 'bootloader_ready' | 'updating' | 'complete' | 'error';
 
 interface DeviceFeatures {
-  version: string;
   bootloaderVersion?: string;
-  bootloaderHash?: string;
-  bootloaderMode?: boolean;
+  version: string;
   initialized: boolean;
-  deviceId: string;
+  bootloaderMode?: boolean;
 }
+
+interface CompletedSteps {
+  step1_unplugged: boolean;
+  step2_holding: boolean;
+  step3_plugged: boolean;
+  step4_bootloader: boolean;
+}
+
+const LATEST_BOOTLOADER_VERSION = "2.1.4";
 
 export function Step2VerifyBootloader({ onNext, deviceId }: StepProps) {
   const [features, setFeatures] = useState<DeviceFeatures | null>(null);
-  const [flowState, setFlowState] = useState<UpdateFlowState>('checking');
+  const [flowState, setFlowState] = useState<FlowState>('checking');
+  const flowStateRef = useRef<FlowState>('checking');
   const [error, setError] = useState<string | null>(null);
   const [disconnectedDeviceId, setDisconnectedDeviceId] = useState<string | null>(null);
+  const [completedSteps, setCompletedSteps] = useState<CompletedSteps>({
+    step1_unplugged: false,
+    step2_holding: false,
+    step3_plugged: false,
+    step4_bootloader: false,
+  });
 
-  // Constants
-  const LATEST_BOOTLOADER_VERSION = "2.1.4";
+  // Keep flowStateRef in sync with flowState
+  useEffect(() => {
+    flowStateRef.current = flowState;
+  }, [flowState]);
 
   useEffect(() => {
     if (deviceId) {
+      console.log(`🔧 [BOOTLOADER] Starting bootloader check for device: ${deviceId}`);
       getDeviceFeatures();
-      setupDeviceEventListeners();
+      
+      // Set up event listeners immediately when component mounts
+      console.log('🎧 [BOOTLOADER] Setting up initial event listeners...');
+      setupInitialEventListeners().catch(error => {
+        console.error('❌ [BOOTLOADER] Failed to set up event listeners:', error);
+      });
     }
-
+    
+    // Cleanup function
     return () => {
-      // Cleanup event listeners
+      console.log('🧹 [BOOTLOADER] Component unmounting, cleaning up listeners...');
+      if ((window as any).bootloaderListeners) {
+        try {
+          (window as any).bootloaderListeners.disconnect?.();
+          (window as any).bootloaderListeners.connect?.();
+          console.log('✅ [BOOTLOADER] Event listeners cleaned up');
+        } catch (error) {
+          console.error('❌ [BOOTLOADER] Error cleaning up listeners:', error);
+        }
+      }
     };
   }, [deviceId]);
 
-  const setupDeviceEventListeners = async () => {
-    // Listen for device disconnect events
-    await listen('device:disconnected', (event: any) => {
-      console.log('🔌 [BOOTLOADER] Device disconnected:', event.payload, 'Current state:', flowState);
-      if (flowState === 'wait_disconnect' && event.payload === deviceId) {
-        console.log('✅ [BOOTLOADER] Expected disconnect detected!');
-        setDisconnectedDeviceId(deviceId);
-        setFlowState('disconnected');
-      }
-      // Also log unexpected disconnects for debugging
-      else if (event.payload === deviceId) {
-        console.log(`⚠️ [BOOTLOADER] Device disconnected but we're in state "${flowState}", not "wait_disconnect"`);
-      }
-    });
+  // Set up initial event listeners that are always active
+  const setupInitialEventListeners = async () => {
+    try {
+      console.log('🎧 [BOOTLOADER] Setting up disconnect/connect listeners...');
+      console.log('🎧 [BOOTLOADER] Our device ID is:', deviceId);
+      console.log('🎧 [BOOTLOADER] Current flow state:', flowStateRef.current);
+      
+      // Test that events work at all
+      console.log('🧪 [BOOTLOADER] Testing if Tauri events work...');
+      
+      // Listen for device disconnect
+      console.log('🎧 [BOOTLOADER] Setting up device:disconnected listener...');
+      const disconnectListener = await listen('device:disconnected', (event: any) => {
+        console.log('🔌 [BOOTLOADER] ==================== DISCONNECT EVENT RECEIVED ====================');
+        console.log('🔌 [BOOTLOADER] Event payload:', event.payload);
+        console.log('🔌 [BOOTLOADER] Current state:', flowStateRef.current);
+        console.log('🔌 [BOOTLOADER] Our device ID:', deviceId);
+        console.log('🔌 [BOOTLOADER] ================================================================');
+        
+        const disconnectedDeviceId = event.payload?.device_id || event.payload;
+        
+        if (disconnectedDeviceId === deviceId) {
+          console.log('✅ [BOOTLOADER] Our device disconnected! Device ID matches:', deviceId);
+          if (flowStateRef.current === 'wait_disconnect') {
+            console.log('✅ [BOOTLOADER] Step 1 completed - Device unplugged');
+            setCompletedSteps(prev => ({ ...prev, step1_unplugged: true, step2_holding: true }));
+            setFlowState('disconnected');
+          } else {
+            console.log(`⚠️ [BOOTLOADER] Device disconnected but we're in state "${flowStateRef.current}", not waiting for disconnect`);
+          }
+        } else {
+          console.log(`ℹ️ [BOOTLOADER] Different device disconnected: ${disconnectedDeviceId} (ours: ${deviceId})`);
+        }
+      });
 
-    // Listen for device connect events  
-    await listen('device:connected', (event: any) => {
-      console.log('🔌 [BOOTLOADER] Device connected:', event.payload, 'Current state:', flowState);
-      if (flowState === 'wait_reconnect') {
-        console.log('🔍 [BOOTLOADER] Checking if reconnected device is in bootloader mode...');
-        // Check if this device is in bootloader mode - could be same ID or different
-        setTimeout(() => {
-          checkReconnectedDevice(event.payload);
-        }, 1500); // Give device more time to settle
-      }
-      // Also log unexpected connects for debugging
-      else if (event.payload === deviceId) {
-        console.log(`⚠️ [BOOTLOADER] Device connected but we're in state "${flowState}", not "wait_reconnect"`);
-        console.log('🔍 [BOOTLOADER] Checking device anyway for bootloader mode...');
-        // Check anyway - maybe the device is already in bootloader mode
-        setTimeout(() => {
-          checkReconnectedDevice(event.payload);
-        }, 1500);
-      }
-    });
+      // Listen for device reconnect
+      console.log('🎧 [BOOTLOADER] Setting up device:connected listener...');
+      const connectListener = await listen('device:connected', (event: any) => {
+        console.log('🔌 [BOOTLOADER] ==================== CONNECT EVENT RECEIVED ====================');
+        console.log('🔌 [BOOTLOADER] Event payload:', event.payload);
+        console.log('🔌 [BOOTLOADER] Current state:', flowStateRef.current);
+        console.log('🔌 [BOOTLOADER] Our device ID:', deviceId);
+        console.log('🔌 [BOOTLOADER] ================================================================');
+        
+        const connectedDeviceId = event.payload?.unique_id || event.payload;
+        
+        if (connectedDeviceId === deviceId) {
+          console.log('🔄 [BOOTLOADER] Our device reconnected!', deviceId);
+          
+          // Always check for bootloader mode when our device reconnects
+          setCompletedSteps(prev => ({ ...prev, step3_plugged: true }));
+          
+          // Check if device is in bootloader mode
+          setTimeout(async () => {
+            try {
+              console.log('🔍 [BOOTLOADER] Checking if device is in bootloader mode...');
+              const features = await invoke('get_features', { deviceId }) as DeviceFeatures;
+              console.log('🔍 [BOOTLOADER] Reconnected device features:', features);
+              
+              if (features && features.bootloaderMode) {
+                console.log('🎯 [BOOTLOADER] Device is in bootloader mode! All steps complete!');
+                setCompletedSteps(prev => ({ ...prev, step4_bootloader: true }));
+                
+                // Wait a moment to show completion, then auto-advance
+                setTimeout(() => {
+                  setFlowState('bootloader_ready');
+                }, 1500);
+              } else {
+                console.log('❌ [BOOTLOADER] Device not in bootloader mode, staying in current state');
+                // Don't reset if we're already in a good state
+                if (flowStateRef.current === 'wait_disconnect' || flowStateRef.current === 'instructions') {
+                  console.log('🔄 [BOOTLOADER] Back to instructions');
+                  setFlowState('instructions');
+                  // Reset steps since bootloader mode wasn't achieved
+                  setCompletedSteps({
+                    step1_unplugged: false,
+                    step2_holding: false,
+                    step3_plugged: false,
+                    step4_bootloader: false,
+                  });
+                }
+              }
+            } catch (error) {
+              console.error('Failed to check device features after reconnect:', error);
+            }
+          }, 2000); // Give device time to settle
+        } else {
+          console.log(`ℹ️ [BOOTLOADER] Different device connected: ${connectedDeviceId} (ours: ${deviceId})`);
+        }
+      });
+
+      // Store listeners for cleanup
+      (window as any).bootloaderListeners = {
+        disconnect: disconnectListener,
+        connect: connectListener
+      };
+      
+      console.log('✅ [BOOTLOADER] Initial event listeners set up successfully');
+      console.log('✅ [BOOTLOADER] Stored listeners in window.bootloaderListeners');
+      console.log('✅ [BOOTLOADER] Setup complete - ready to receive events!');
+      
+    } catch (error) {
+      console.error('Failed to set up initial bootloader event listeners:', error);
+      setError('Failed to set up device monitoring');
+    }
   };
+
+  // Cleanup event listeners
+  useEffect(() => {
+    return () => {
+      console.log('🧹 [BOOTLOADER] Cleaning up event listeners');
+      const listeners = (window as any).bootloaderListeners;
+      if (listeners) {
+        if (listeners.disconnect && typeof listeners.disconnect === 'function') {
+          listeners.disconnect();
+        }
+        if (listeners.connect && typeof listeners.connect === 'function') {
+          listeners.connect();
+        }
+        delete (window as any).bootloaderListeners;
+      }
+    };
+  }, []);
+
+  // Auto-cleanup when we reach complete state
+  useEffect(() => {
+    if (flowState === 'complete' || flowState === 'bootloader_ready') {
+      console.log('🧹 [BOOTLOADER] Flow complete, cleaning up listeners');
+      const listeners = (window as any).bootloaderListeners;
+      if (listeners) {
+        if (listeners.disconnect && typeof listeners.disconnect === 'function') {
+          listeners.disconnect();
+        }
+        if (listeners.connect && typeof listeners.connect === 'function') {
+          listeners.connect();
+        }
+        delete (window as any).bootloaderListeners;
+      }
+    }
+  }, [flowState]);
 
   const checkReconnectedDevice = async (newDeviceId: string) => {
     try {
@@ -204,6 +330,7 @@ export function Step2VerifyBootloader({ onNext, deviceId }: StepProps) {
   };
 
   const startWaitingForDisconnect = () => {
+    console.log('🔄 [BOOTLOADER] User clicked "I\'m Ready" - now waiting for disconnect...');
     setFlowState('wait_disconnect');
   };
 
@@ -260,7 +387,7 @@ export function Step2VerifyBootloader({ onNext, deviceId }: StepProps) {
       setError(null);
       
       const success = await invoke('update_device_bootloader', {
-        deviceId: features.deviceId,
+        deviceId: deviceId,
         targetVersion: LATEST_BOOTLOADER_VERSION
       });
       
@@ -380,24 +507,56 @@ export function Step2VerifyBootloader({ onNext, deviceId }: StepProps) {
                     
                     <VStack gap={3} fontSize="sm" color="blue.100" align="stretch">
                       <HStack>
-                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
-                        <Text><strong>1.</strong> UNPLUG your KeepKey from the USB cable</Text>
+                        <Icon 
+                          as={completedSteps.step1_unplugged ? FaCheck : FaArrowDown} 
+                          color={completedSteps.step1_unplugged ? "green.400" : "blue.400"} 
+                          minW="16px" 
+                        />
+                        <Text 
+                          textDecoration={completedSteps.step1_unplugged ? "line-through" : "none"}
+                          opacity={completedSteps.step1_unplugged ? 0.7 : 1}
+                        >
+                          <strong>1.</strong> UNPLUG your KeepKey from the USB cable
+                        </Text>
                       </HStack>
                       <HStack>
-                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
-                        <Text><strong>2.</strong> HOLD DOWN the single button on your device</Text>
+                        <Icon 
+                          as={completedSteps.step2_holding ? FaCheck : FaArrowDown} 
+                          color={completedSteps.step2_holding ? "green.400" : "blue.400"} 
+                          minW="16px" 
+                        />
+                        <Text 
+                          textDecoration={completedSteps.step2_holding ? "line-through" : "none"}
+                          opacity={completedSteps.step2_holding ? 0.7 : 1}
+                        >
+                          <strong>2.</strong> HOLD DOWN the single button on your device
+                        </Text>
                       </HStack>
                       <HStack>
-                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
-                        <Text><strong>3.</strong> While continuing to hold the button, PLUG the USB cable back in</Text>
+                        <Icon 
+                          as={completedSteps.step3_plugged ? FaCheck : FaArrowDown} 
+                          color={completedSteps.step3_plugged ? "green.400" : "blue.400"} 
+                          minW="16px" 
+                        />
+                        <Text 
+                          textDecoration={completedSteps.step3_plugged ? "line-through" : "none"}
+                          opacity={completedSteps.step3_plugged ? 0.7 : 1}
+                        >
+                          <strong>3.</strong> While continuing to hold the button, PLUG the USB cable back in
+                        </Text>
                       </HStack>
                       <HStack>
-                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
-                        <Text><strong>4.</strong> Keep holding until the screen shows "BOOTLOADER MODE"</Text>
-                      </HStack>
-                      <HStack>
-                        <Icon as={FaArrowDown} color="blue.400" minW="16px" />
-                        <Text><strong>5.</strong> Release the button</Text>
+                        <Icon 
+                          as={completedSteps.step4_bootloader ? FaCheck : FaArrowDown} 
+                          color={completedSteps.step4_bootloader ? "green.400" : "blue.400"} 
+                          minW="16px" 
+                        />
+                        <Text 
+                          textDecoration={completedSteps.step4_bootloader ? "line-through" : "none"}
+                          opacity={completedSteps.step4_bootloader ? 0.7 : 1}
+                        >
+                          <strong>4.</strong> Keep holding until the screen shows "BOOTLOADER MODE"
+                        </Text>
                       </HStack>
                     </VStack>
 
@@ -414,28 +573,22 @@ export function Step2VerifyBootloader({ onNext, deviceId }: StepProps) {
       case 'wait_disconnect':
         return (
           <VStack gap={4} py={8}>
-            <Icon as={FaUsb} boxSize={12} color="orange.400" />
+            <Spinner size="lg" color="blue.400" />
             <Text fontSize="lg" fontWeight="bold">Waiting for device to be unplugged...</Text>
             <Text color="gray.400" textAlign="center">
-              Hold both buttons and unplug your KeepKey now
+              Please follow the instructions above to unplug your device
             </Text>
-            <Spinner size="lg" color="orange.400" />
           </VStack>
         );
 
       case 'disconnected':
         return (
           <VStack gap={4} py={8}>
-            <Icon as={FaCheckCircle} boxSize={12} color="green.400" />
-            <Text fontSize="lg" fontWeight="bold" color="green.300">
-              ✅ Good! Device unplugged
-            </Text>
+            <Icon as={FaCheckCircle} boxSize={8} color="green.400" />
+            <Text fontSize="lg" fontWeight="bold" color="green.400">Device Unplugged Successfully!</Text>
             <Text color="gray.400" textAlign="center">
-              Now plug the USB cable back in while continuing to hold both buttons
+              Great! Now hold the button and plug it back in to enter bootloader mode...
             </Text>
-            <Button colorScheme="green" onClick={startWaitingForReconnect} size="lg">
-              Continue - Wait for Reconnect
-            </Button>
           </VStack>
         );
 

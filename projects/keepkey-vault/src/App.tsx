@@ -12,7 +12,7 @@ import { useCommonDialogs } from './hooks/useCommonDialogs';
 import { DeviceUpdateManager } from './components/DeviceUpdateManager';
 import { DeviceSetupManager } from './components/DeviceSetupManager';
 import { useOnboardingState } from './hooks/useOnboardingState';
-// import { VaultInterface } from './components/VaultInterface';
+import { VaultInterface } from './components/VaultInterface';
 import { DialogProvider, useDialog } from './contexts/DialogContext'
 
 // Define the expected structure of DeviceFeatures from Rust
@@ -271,6 +271,14 @@ function App() {
                     // Listen for device disconnection events
                     const unlistenDeviceDisconnected = await listen('device:disconnected', (event) => {
                         console.log('Device disconnected event received:', event.payload);
+                        
+                        // Check if setup is in progress - if so, ignore disconnection for app state
+                        if ((window as any).KEEPKEY_SETUP_IN_PROGRESS) {
+                            console.log('🛡️ App: Setup in progress - NOT resetting app state on disconnect');
+                            console.log('🛡️ App: Keeping current state to protect setup wizard');
+                            return; // Don't change app state during setup
+                        }
+                        
                         setDeviceConnected(false);
                         setDeviceInfo(null);
                         setDeviceUpdateComplete(false);

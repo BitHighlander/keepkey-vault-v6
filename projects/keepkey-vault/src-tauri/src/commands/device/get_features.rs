@@ -3,9 +3,9 @@
 use tauri::State;
 use keepkey_rust::features::DeviceFeatures;
 use crate::commands::DeviceQueueManager;
-use super::get_or_create_device_queue;
+use super::{get_or_create_device_queue, DEV_MODE, DEV_FORCE_DEVICE_ID};
 
-/// Get features for a specific device with bootloader mode fallback support
+/// Get features for a specific device with proper bootloader mode communication
 #[tauri::command]
 pub async fn get_features(
     device_id: String,
@@ -22,58 +22,71 @@ pub async fn get_features(
             Ok(convert_features_to_device_features(features))
         }
         Err(e) => {
-            println!("⚠️ Queue-based features failed for {}: {}", device_id, e);
-            println!("🔄 Attempting fallback method for potential bootloader mode device...");
-            
-            // If queue method fails, try fallback approach for bootloader mode
-            try_fallback_features(&device_id).await
+            // Check if this might be an OOB bootloader communication issue
+            let error_str = e.to_string();
+            if error_str.contains("HID write failed") || error_str.contains("Device is disconnected") {
+                println!("🔧 Queue-based features failed for {}: {}", device_id, error_str);
+                println!("🔄 Attempting OOB bootloader detection method...");
+                
+                // Try the proper OOB bootloader detection method
+                try_oob_bootloader_detection(&device_id).await
+            } else {
+                let error_msg = format!("Failed to get device features for {}: {}", device_id, e);
+                println!("❌ {}", error_msg);
+                Err(error_msg)
+            }
         }
     }
 }
 
-/// Fallback method for getting features when normal communication fails (bootloader mode)
-async fn try_fallback_features(device_id: &str) -> Result<DeviceFeatures, String> {
-    // Try to get device features using a more direct approach that works with bootloader mode
-    // This simulates what keepkey-usb's get_device_features_with_fallback does
+/// Try to get device features using OOB bootloader detection methods
+async fn try_oob_bootloader_detection(device_id: &str) -> Result<DeviceFeatures, String> {
+    println!("🔧 Attempting OOB bootloader detection for device {}", device_id);
     
-    // For now, we'll create a simplified bootloader mode device features
-    // In a full implementation, we'd need access to the USB device registry
-    // and use the actual fallback communication methods
+    // Get list of connected devices to find the physical device
+    let devices = keepkey_rust::features::list_connected_devices();
     
-    println!("🔧 [BOOTLOADER FALLBACK] Simulating bootloader mode detection for device {}", device_id);
-    
-    // Create a minimal DeviceFeatures for bootloader mode
-    // This is a temporary solution - the real implementation would use USB fallback
-    let bootloader_features = DeviceFeatures {
-        vendor: Some("keepkey.com".to_string()),
-        label: Some("".to_string()),
-        model: Some("KeepKey".to_string()),
-        firmware_variant: None,
-        device_id: Some(device_id.to_string()),
-        language: Some("english".to_string()),
-        bootloader_mode: true, // Key: This indicates bootloader mode
-        version: "1.0.3".to_string(), // Bootloader version for old bootloaders
-        firmware_hash: None,
-        bootloader_hash: Some("cb222548a39ff6cbe2ae2f02c8d431c9ae0df850f814444911f521b95ab02f4c".to_string()),
-        bootloader_version: Some("1.0.3".to_string()),
-        initialized: false,
-        imported: None,
-        no_backup: false,
-        pin_protection: false,
-        pin_cached: false,
-        passphrase_protection: false,
-        passphrase_cached: false,
-        wipe_code_protection: false,
-        auto_lock_delay_ms: None,
-        policies: vec!["ShapeShift".to_string()],
+    // Find the actual physical device (handling DEV_MODE device ID mapping)
+    let target_device = if DEV_MODE && device_id == DEV_FORCE_DEVICE_ID {
+        // In dev mode, map the hardcoded device ID to any connected KeepKey
+        devices.iter()
+            .find(|d| d.is_keepkey)
+            .ok_or_else(|| format!("No physical KeepKey device found for development deviceId {}", device_id))?
+    } else {
+        // Normal mode: find device by exact ID match
+        devices.iter()
+            .find(|d| d.unique_id == device_id)
+            .ok_or_else(|| format!("Device {} not found in connected devices", device_id))?
     };
     
-    println!("✅ [BOOTLOADER FALLBACK] Created bootloader mode features for device {}", device_id);
-    println!("   - bootloader_mode: {}", bootloader_features.bootloader_mode);
-    println!("   - version: {}", bootloader_features.version);
-    println!("   - bootloader_version: {:?}", bootloader_features.bootloader_version);
+    // Use the proper OOB bootloader detection method
+    let result = tokio::task::spawn_blocking({
+        let device = target_device.clone();
+        move || -> Result<DeviceFeatures, String> {
+            keepkey_rust::features::get_device_features_with_fallback(&device)
+                .map_err(|e| e.to_string())
+        }
+    }).await;
     
-    Ok(bootloader_features)
+    match result {
+        Ok(Ok(features)) => {
+            println!("✅ OOB bootloader detection successful for device {}", device_id);
+            println!("   - bootloader_mode: {}", features.bootloader_mode);
+            println!("   - version: {}", features.version);
+            println!("   - initialized: {}", features.initialized);
+            Ok(features)
+        }
+        Ok(Err(e)) => {
+            let error_msg = format!("OOB bootloader detection failed for {}: {}", device_id, e);
+            println!("❌ {}", error_msg);
+            Err(error_msg)
+        }
+        Err(e) => {
+            let error_msg = format!("Task execution error for {}: {}", device_id, e);
+            println!("❌ {}", error_msg);
+            Err(error_msg)
+        }
+    }
 }
 
 /// Look up bootloader version from hash using releases.json

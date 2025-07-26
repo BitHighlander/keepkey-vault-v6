@@ -34,8 +34,8 @@ use crate::commands::DeviceQueueManager;
 use keepkey_rust::device_queue::{DeviceQueueFactory, DeviceQueueHandle};
 
 // Development mode: Force all devices to use this specific deviceId
-const DEV_FORCE_DEVICE_ID: &str = "932313031174732313008100";
-const DEV_MODE: bool = true; // Set to false for production
+pub const DEV_FORCE_DEVICE_ID: &str = "932313031174732313008100";
+pub const DEV_MODE: bool = true; // Set to false for production
 
 /// Get or create a device queue handle for the given device ID
 pub async fn get_or_create_device_queue(

@@ -75,6 +75,18 @@ export function SetupWizard({ onClose, onComplete, initialDeviceId }: SetupWizar
   const highlightColor = "blue.500";
   const { hide } = useDialog();
 
+  // Set setup in progress flag when component mounts
+  useEffect(() => {
+    console.log('🛡️ SetupWizard: Setting KEEPKEY_SETUP_IN_PROGRESS = true');
+    (window as any).KEEPKEY_SETUP_IN_PROGRESS = true;
+    
+    // Cleanup when component unmounts
+    return () => {
+      console.log('🛡️ SetupWizard: Clearing KEEPKEY_SETUP_IN_PROGRESS flag');
+      (window as any).KEEPKEY_SETUP_IN_PROGRESS = false;
+    };
+  }, []);
+
   // Load existing setup progress when component mounts
   useEffect(() => {
     if (initialDeviceId) {

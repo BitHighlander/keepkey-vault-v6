@@ -1120,25 +1120,13 @@ pub async fn initialize_device_wallet(device_id: String, label: String) -> Resul
 /// Get recovery phrase from device (for backup display)
 #[tauri::command]
 pub async fn get_device_recovery_phrase(device_id: String) -> Result<Vec<String>, String> {
-    log::info!("Getting recovery phrase from device: {}", device_id);
+    log::error!("Recovery phrase retrieval not implemented for device: {}", device_id);
     
+    // This feature is not yet implemented - fail fast instead of returning mock data
     // TODO: Implement actual recovery phrase retrieval via HDWallet interface
     // This should get the recovery phrase from the device for display/backup
     
-    // Simulate device communication delay
-    tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-    
-    // For demo purposes, return a mock recovery phrase
-    // In real implementation, this would come from the device
-    let mock_phrase = vec![
-        "abandon".to_string(), "ability".to_string(), "able".to_string(),
-        "about".to_string(), "above".to_string(), "absent".to_string(),
-        "absorb".to_string(), "abstract".to_string(), "absurd".to_string(),
-        "abuse".to_string(), "access".to_string(), "accident".to_string(),
-    ];
-    
-    log::info!("Recovery phrase retrieved successfully");
-    Ok(mock_phrase)
+    Err("Recovery phrase retrieval is not yet implemented. This feature requires direct device communication that is not available.".to_string())
 }
 
 /// Complete wallet creation (mark as initialized)
@@ -2693,67 +2681,17 @@ pub async fn refresh_portfolio(
 
     log::info!("Fetching portfolio data for {} xpubs", xpubs.len());
 
-    let mut portfolio_data = Vec::new();
+    // Portfolio data fetching is not yet implemented - fail fast instead of creating mock data
+    // TODO: Implement real balance fetching from external API (Pioneer or other data source)
+    log::error!("Portfolio refresh not implemented - real data fetching is required");
     
-    // Emit progress event
+    // Emit progress event indicating failure
     let _ = app_handle.emit("portfolio-refresh-progress", serde_json::json!({
-        "status": "fetching",
-        "total": xpubs.len(),
-        "completed": 0
+        "status": "error",
+        "message": "Portfolio refresh not implemented - requires real data source integration"
     }));
 
-    // For now, create mock data since we don't have Pioneer client
-    // TODO: Implement real balance fetching from external API
-    for (index, xpub) in xpubs.iter().enumerate() {
-        log::info!("📡 Mock fetching balance for {} ({})", xpub.label, &xpub.pubkey[0..20]);
-        
-        // Mock balance data (replace with real API call)
-        let mock_balance = "0.00000000";
-        let mock_usd_value = "0.00";
-        let mock_price = "50000.00";
-        
-        portfolio_data.push(PortfolioCacheInput {
-            pubkey: xpub.pubkey.clone(),
-            caip: xpub.caip.clone(),
-            balance: mock_balance.to_string(),
-            balance_usd: mock_usd_value.to_string(),
-            price_usd: mock_price.to_string(),
-            symbol: Some("BTC".to_string()),
-        });
-        
-        // Emit progress event
-        let _ = app_handle.emit("portfolio-refresh-progress", serde_json::json!({
-            "status": "fetching",
-            "total": xpubs.len(),
-            "completed": index + 1,
-            "current": xpub.label
-        }));
-    }
-
-    // Cache the results
-    if !portfolio_data.is_empty() {
-        if let Err(e) = db.cache_portfolio_data(&portfolio_data) {
-            log::error!("Failed to cache portfolio data: {}", e);
-            return Err(format!("Failed to cache portfolio data: {}", e));
-        }
-    }
-
-    // Get the cached data to return
-    let cached_data = db.get_portfolio_cache().map_err(|e| {
-        log::error!("Failed to get cached portfolio data: {}", e);
-        format!("Failed to get cached portfolio data: {}", e)
-    })?;
-
-    log::info!("🎉 Portfolio refresh completed! Cached {} entries", cached_data.len());
-    
-    // Emit completion event
-    let _ = app_handle.emit("portfolio-refresh-completed", serde_json::json!({
-        "status": "completed",
-        "entries": cached_data.len(),
-        "data": cached_data
-    }));
-
-    Ok(cached_data)
+    Err("Portfolio refresh is not yet implemented. This feature requires integration with real balance data sources.".to_string())
 }
 
 #[command]
